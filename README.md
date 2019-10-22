@@ -32,6 +32,13 @@ WantedBy=multi-user.target
 require('/srv/nodejs-easywebserver').create('forcedir,php,html', s => s.listen(8081));
 ```
 
+**`/srv/mywebapp/public_html/index.phhp`**:
+```php
+<?php
+echo "Hello World!";
+?>
+```
+
 ```bash
 systemctl enable /root/nodejs-mywebapp.service
 systemctl start nodejs-mywebapp
