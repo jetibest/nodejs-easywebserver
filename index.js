@@ -55,7 +55,15 @@ const self = module.exports = {
 			return new Promise(async function(resolve, reject)
 			{
 				// check with fs.access if we can read mod-name.js, otherwise throw error that module does not exist
-				const m = await require('./mod-' + module.name + '.js').create(module);
+				var m;
+				if(module.middleware)
+				{
+					m = module;
+				}
+				else
+				{
+					m = await require(module.filename || (path.resolve(module.path || __dirname, 'mod-' + module.name + '.js'))).create.call(module, module.options || module);
+				}
 				m._options = module;
 				m.group = module.group || m.group || 'catch-default';
 				m.priority = module.priority || m.priority || 100;
