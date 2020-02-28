@@ -17,6 +17,7 @@ const generateConfig = function(options)
 		'error_log = ' + path + PHP_DIR + 'error.log',
 		'daemonize = no',
 		'[www]',
+		'clear_env = no', // keep environment variables, otherwise set specifically with env[PATH] = '/usr/bin:..'
 		'user = ' + (options.user || 'apache'),
 		'group = ' + (options.group || options.user || 'apache'),
 		// 'chroot = ' + path, -> chroot for php-fpm is broken
