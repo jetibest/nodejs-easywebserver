@@ -85,6 +85,15 @@ module.exports = {
 			}
 			throw err;
 		});
+	
+		await fs.promises.mkdir(path.resolve(path.resolve(phpdir, PHP_DIR), 'session')).catch(function(err)
+		{
+			if(err.code === 'EEXIST')
+			{
+				return;
+			}
+			throw err;
+		});
 		
 		// console.log('php-fpm using documentRoot: ' + webdir + ', phpdir: ' + phpdir + ', chrooted webdir: ' + webdir);
 		const app = express.Router({strict: true});
@@ -136,6 +145,15 @@ module.exports = {
 			host: host,
 			port: port
 		}));
+		
+		// ensure apache ownership for .php (so it can store sessions)
+		child_process.exec('chown -R apache:apache ' + path.resolve(phpdir, PHP_DIR), function(err, stdout, stderr)
+		{
+			if(err)
+			{
+				throw err;
+			}
+		});
 		
 		// run php-fpm server
 		// console.log('php-fpm webdir: ' + webdir);
