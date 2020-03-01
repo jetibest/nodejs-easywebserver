@@ -40,10 +40,14 @@ module.exports = {
 		console.log('mod-dirtofile initialized, tries to add extensions, while target does not exist (/page/ may match /page.html)');
 		return {
 			group: 'pre-route',
-			middleware: async function(req, res, next)
+			middleware: function(req, res, next)
 			{
 				// directory paths will automatically be updated to file, if directory does not exist, but a file with any extension does
 				// e.g. /page/ will refer to /page.html if page does not exist and page.html does
+				if(!req.url || req.url === '/')
+				{
+					return next(); // special case for the current root directory
+				}
 				findExtension(
 					req,
 					path.resolve(mod.webdir, req.url.replace(/^\//gi, '')),
