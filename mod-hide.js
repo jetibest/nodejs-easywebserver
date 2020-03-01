@@ -2,9 +2,9 @@ module.exports = {
 	create: function(options)
 	{
 		options = options || {};
-		console.log('mod-hide initialized, files and directories that are intended to stay hidden cannot be accessed by a web url (default=/^[.$_]/gi).');
+		console.log('mod-hide initialized, files and directories that are intended to stay hidden cannot be accessed by a path (default=/(^|/)[.$_]/gi), the regex applies to the whole path.');
 		var mod = this;
-		mod.regexes = options.regexes = options.regexes || [/^[.$_]/gi];
+		mod.regexes = options.regexes || [/(^|\/)[.$_]/gi];
 		mod.reset = function()
 		{
 			mod.regexes = options.regexes || [];
