@@ -17,7 +17,7 @@ const CHAR_CODE_N = '\n'.charCodeAt(0);
 var parseHeader = function(header, res)
 {
 	// we may want to set the headers of res
-	var statusCode = 200;
+	var statusCode;
 	var statusMessage = '';
 	var responseHeaders = {};
 	var headerlines = header.split(/\r?\n/gi);
@@ -31,11 +31,10 @@ var parseHeader = function(header, res)
 			var value = ln.substring(colon + 1).replace(/(^\s+)|(\s+$)/gi, '');
 			if(key.toLowerCase() === 'status')
 			{
-				const match = value.match(/(\d+)\s+?(.*)?/g);
-				statusCode = parseInt(match[1]);
-				statusMessage = match[2] || '';
+				statusCode = parseInt(value.replace(/^([0-9]+)(|\s+.*)$/gi, function($0, $1){return $1;}));
+				statusMessage = value.replace(/^[0-9]+\s+/gi, '');
 			}
-			else if(key.toLowerCase() !== 'x-powered-by')
+			else
 			{
 				var arr = responseHeaders[key];
 				if(!arr)
@@ -49,7 +48,7 @@ var parseHeader = function(header, res)
 			}
 		}
 	}
-	res.writeHead(statusCode, statusMessage, responseHeaders);
+	res.writeHead(statusCode || 200, statusMessage || '', responseHeaders);
 };
 
 // custom module php-fpm, because the original module does only support php short output
@@ -154,6 +153,7 @@ const phpFpm = function(userOptions = {}, customParams = {})
 								if(chunk === null) break;
 								if(chunk[0] !== CHAR_CODE_N)
 								{
+									header += '\r';
 									header += chunk.toString('utf8');
 									continue;
 								}
@@ -161,6 +161,7 @@ const phpFpm = function(userOptions = {}, customParams = {})
 								if(chunk === null) break;
 								if(chunk[0] !== CHAR_CODE_R)
 								{
+									header += '\r\n';
 									header += chunk.toString('utf8');
 									continue;
 								}
@@ -168,6 +169,7 @@ const phpFpm = function(userOptions = {}, customParams = {})
 								if(chunk === null) break;
 								if(chunk[0] !== CHAR_CODE_N)
 								{
+									header += '\r\n\r';
 									header += chunk.toString('utf8');
 									continue;
 								}
