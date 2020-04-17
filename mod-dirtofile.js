@@ -15,7 +15,6 @@ var findExtension = function(req, filepath, queryhashstr, extensions, next)
 			return findExtension(req, filepath, queryhashstr, extensions, next);
 		}
 		req.url = req.url.replace(/(\/)?([?][^#]*)?([#].*)?$/gi, '') + extension + queryhashstr; // rewrite url, as we found the file
-		console.log('extension matched existing file: ' + req.url + ', for: ' + filepath + extension);
 		next();
 	});
 };
