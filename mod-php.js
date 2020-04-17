@@ -5,13 +5,408 @@ const net = require('net');
 //const phpFpm = require('php-fpm');
 const express = require('express');
 
-const fastCgi = require('fastcgi-client')
+const fastcgiclient = (function()
+{
+	// new fastcgi client that does not crash
+	
+	const BEGIN_REQUEST_DATA_NO_KEEP_CONN = Buffer.from('\0\x01\0\0\0\0\0\0'); // FCGI_ROLE_RESPONDER && !FCGI_KEEP_CONN
+	const BEGIN_REQUEST_DATA_KEEP_CONN = Buffer.from('\0\x01\x01\0\0\0\0\0'); // FCGI_ROLE_RESPONDER && FCGI_KEEP_CONN
+	const MSG_TYPE = {
+	    FCGI_BEGIN_REQUEST: 1,
+	    FCGI_ABORT_REQUEST: 2,
+	    FCGI_END_REQUEST: 3,
+	    FCGI_PARAMS: 4,
+	    FCGI_STDIN: 5,
+	    FCGI_STDOUT: 6,
+	    FCGI_STDERR: 7,
+	    FCGI_DATA: 8,
+	    FCGI_GET_VALUES: 9,
+	    FCGI_GET_VALUES_RESULT: 10,
+	    FCGI_UNKNOWN_TYPE: 11,
+	    FCGI_MAXTYPE: 11
+	};
+	const PROTOCOL_STATUS = {
+	    FCGI_REQUEST_COMPLETE: 0,
+	    FCGI_CANT_MPX_CONN: 1,
+	    FCGI_OVERLOADED: 2,
+	    FCGI_UNKNOWN_ROLE: 3
+	};
+	const PADDING_BUFS = [
+		Buffer.alloc(0),
+		Buffer.from('\0'),
+		Buffer.from('\0\0'),
+		Buffer.from('\0\0\0'),
+		Buffer.from('\0\0\0\0'),
+		Buffer.from('\0\0\0\0\0'),
+		Buffer.from('\0\0\0\0\0\0'),
+		Buffer.from('\0\0\0\0\0\0\0'),
+		Buffer.from('\0\0\0\0\0\0\0\0')
+	];
+	
+	var fcgi_send = async function(socket, msgType, reqId, data)
+	{
+		if(socket.destroyed || socket.pending)
+		{
+			return false; // socket is not ready yet
+		}
+		if(data === null)
+		{
+			data = PADDING_BUFS[0];
+		}
+		var len = data.length;
+		var sendpart = async function(data, start, end)
+		{
+			var contentLen = end - start;
+			var paddingLen = (8 - (contentLen % 8)) % 8;
+			if(start || end !== len)
+			{
+				data = data.slice(start, end);
+			}
+			var buf = Buffer.alloc(8);
+			buf.writeUInt8(1, 0, true);
+			buf.writeUInt8(msgType, 1, true);
+			buf.writeUInt16BE(reqId, 2, true);
+			buf.writeUInt16BE(contentLen, 4, true);
+			buf.writeUInt8(paddingLen, 6, true);
+			buf.writeUInt8(0, 7, true);
+			
+			return new Promise(function(resolve, reject)
+			{
+				socket.write(buf, function()
+				{
+					if(paddingLen)
+					{
+						socket.write(data, function()
+						{
+							socket.write(PADDING_BUFS[paddingLen], resolve);
+						});
+					}
+					else
+					{
+						socket.write(data, resolve);
+					}
+				});
+			});
+		};
+		var i = 0;
+		while(i < len - 0xffff)
+		{
+			await sendpart(data, i, i += 0xffff);
+		}
+		await sendpart(data, i, len);
+		return true;
+	};
+	var fcgi_receive = (function()
+	{
+		var expectLen = 8;
+		var restDataBufs = [];
+		var restDataLen = 0;
+		var msgType = 0;
+		var reqId = 0;
+		var restBodyLen = 0;
+		var restPaddingLen = 0;
+		return function(chunk, cb)
+		{
+			if(chunk.length + restDataLen < expectLen)
+			{
+				restDataBufs.push(data);
+				restDataLen += data.length;
+				return;
+			}
+			var buf = chunk;
+			var len = buf.length;
+			if(restDataBufs.length)
+			{
+				restDataBufs.push(chunk);
+				len = restDataLen + data.length;
+				buf = Buffer.concat(restDataBufs, len);
+				restDataBufs = [];
+				restDataLen = 0;
+			}
+			
+			// process segment by segment
+			var start = 0;
+			var len = buf.length;
+			while(len > 0)
+			{
+				var offset = (function(buf, start, len)
+				{
+					if(restBodyLen)
+					{
+						// in body
+						if(len < restBodyLen)
+						{
+							restBodyLen -= len;
+							cb(msgType, reqId, buf.slice(start, start + len));
+							return len;
+						}
+						var rest = restBodyLen;
+						restBodyLen = 0;
+						cb(msgType, reqId, buf.slice(start, start + rest));
+						if(!restPaddingLen)
+						{
+							expectLen = 8;
+						}
+						return rest;
+					}
+					
+					if(restPaddingLen)
+					{
+						// in padding
+						if(len < restPaddingLen)
+						{
+							restPaddingLen -= len;
+							return len;
+						}
+						var rest = restPaddingLen;
+						restPaddingLen = 0;
+						expectLen = 8;
+						return rest;
+					}
+					
+					// head
+					var headData = buf.slice(start, start + 8);
+					if(headData.readUInt8(0, true) !== 1)
+					{
+						throw new Error('The server does not speak a compatible FastCGI protocol.');
+						return 0;
+					}
+					msgType = headData.readUInt8(1, true);
+					reqId = headData.readUInt16BE(2, true);
+					restBodyLen = headData.readUInt16BE(4, true);
+					restPaddingLen = headData.readUInt8(6, true);
+					if(msgType === MSG_TYPE.FCGI_GET_VALUES_RESULT || msgType === MSG_TYPE.FCGI_END_REQUEST)
+					{
+						expectLen = restBodyLen + restPaddingLen;
+					}
+					else
+					{
+						expectLen = 0;
+					}
+					return 8;
+				})(buf, start, len);
+				start += offset;
+				len -= offset;
+			}
+		};
+	})();
+	var fcgi_parseEndRequest = function(endRequest)
+	{
+		return {
+			status: endRequest.readUInt32BE(0, true),
+			protocolStatus: endRequest.readUInt8(4, true)
+		};
+	};
+	var fcgi_encodeparams = function(params)
+	{
+		var bufs = [];
+		var bufsLen = 0;
+		for(var k in params)
+		{
+			var bs = (function(key, value)
+			{
+				value = String(value);
+				var bufKey = Buffer.from(key);
+				var bufValue = Buffer.from(value);
+				var bufHead = null;
+				var keyLen = bufKey.length;
+				var valueLen = bufValue.length;
+				if(keyLen > 127 && valueLen > 127)
+				{
+					bufHead = Buffer.alloc(8);
+					bufHead.writeInt32BE(keyLen | 0x80000000, 0, true);
+					bufHead.writeInt32BE(valueLen | 0x80000000, 4, true);
+				}
+				else if(keyLen > 127)
+				{
+					bufHead = Buffer.alloc(5);
+					bufHead.writeInt32BE(keyLen | 0x80000000, 0, true);
+					bufHead.writeUInt8(valueLen, 4, true);
+				}
+				else if(valueLen > 127)
+				{
+					bufHead = Buffer.alloc(5);
+					bufHead.writeUInt8(keyLen, 0, true);
+					bufHead.writeInt32BE(valueLen | 0x80000000, 1, true);
+				}
+				else
+				{
+					bufHead = Buffer.alloc(2);
+					bufHead.writeUInt8(keyLen, 0, true);
+					bufHead.writeUInt8(valueLen, 1, true);
+				}
+				return [
+					bufHead,
+					bufKey,
+					bufValue,
+					bufHead.length + keyLen + valueLen
+				];
+			})(k, params[k]);
+			bufs.push(bs[0], bs[1], bs[2]);
+			bufsLen += bs[3];
+		}
+		return Buffer.concat(bufs, bufsLen);
+	};
+	
+	return function(options)
+	{
+		options = options || {};
+		
+		var self = {};
+		
+		self._host = options.host || '127.0.0.1';
+		self._port = options.port || 9000;
+		self._sockFile = options.sockFile || '';
+		self._maxConns = 'maxConns' in options && options.maxConns <= 65535 ? options.maxConns : 65535;
+		self._maxReqs = 'maxReqs' in options && options.maxReqs <= 65535 ? options.maxReqs : 65535;
+		self._mpxsConns = !!options.mpxsConns;
+		
+		self._connections = [];
+		
+		self.request = function(params, handlers)
+		{
+			handlers = handlers || {};
+			handlers.onconnect = handlers.onconnect || function(){};
+			handlers.onstdout = handlers.onstdout || function(){};
+			handlers.onstderr = handlers.onstderr || function(chunk)
+			{
+				// by default passthrough stderr output to process stderr
+				console.error('fastcgi-client(' + socket.localAddress + ':' + socket.localPort + ' -> ' + socket.remoteAddress + ':' + socket.remotePort + '): ' + chunk);
+			};
+			handlers.onend = handlers.onend || function(){};
+			
+			if(self._connections.length >= self._maxConns)
+			{
+				handlers.onend(new Error('Maximum concurrent connections reached (' + self._connections.length + ').'));
+				return null;
+			}
+			
+			var socketErrors = [];
+			var socket = net.createConnection(self._sockFile ? {path: self._sockFile} : {host: self._host, port: self._port});
+			var endRequest = '';
+			var reqId = 0;
+			socket.on('connect', async function()
+			{
+				reqId = 1;
+				
+				self._connections.push(socket);
+				
+				socket.setKeepAlive(true);
+				
+				// if we want to have serial processing, we would keep conn, and wait for end-request, and then send new begin-request for next connection
+				await fcgi_send(socket, MSG_TYPE.FCGI_BEGIN_REQUEST, reqId, BEGIN_REQUEST_DATA_NO_KEEP_CONN);
+				await fcgi_send(socket, MSG_TYPE.FCGI_PARAMS, reqId, fcgi_encodeparams(params));
+				await fcgi_send(socket, MSG_TYPE.FCGI_PARAMS, reqId, null); // why send null?
+				
+				handlers.onconnect({
+					write: function(data)
+					{
+						return fcgi_send(socket, MSG_TYPE.FCGI_STDIN, reqId, data);
+					},
+					end: function()
+					{
+						return fcgi_send(socket, MSG_TYPE.FCGI_STDIN, reqId, null); // send null as EOF
+					},
+					abort: function()
+					{
+						return fcgi_send(socket, MSG_TYPE.FCGI_ABORT_REQUEST, reqId, Buffer.alloc(0));
+					},
+					destroy: function()
+					{
+						socket.end();
+					}
+				});
+			});
+			socket.on('data', function(chunk)
+			{
+				try
+				{
+					fcgi_receive(chunk, function(msgType, reqId, data)
+					{
+						if(msgType === MSG_TYPE.FCGI_STDOUT)
+						{
+							handlers.onstdout(data);
+						}
+						else if(msgType === MSG_TYPE.FCGI_STDERR)
+						{
+							handlers.onstderr(data);
+						}
+						else if(msgType === MSG_TYPE.FCGI_END_REQUEST)
+						{
+							endRequest = data;
+						}
+					});
+				}
+				catch(err)
+				{
+					socketErrors.push(err);
+					socket.end();
+				}
+			});
+			socket.on('error', function(err)
+			{
+				socketErrors.push(err);
+			});
+			socket.on('close', function()
+			{
+				// remove from connections-array
+				self._connections = self._connections.filter(s => s !== socket);
+				
+				// socket closed
+				if(socketErrors.length)
+				{
+					return handlers.onend(new Error(socketErrors));
+				}
+				if(!reqId)
+				{
+					return handlers.onend(new Error('Cannot send request to server (' + self._host + ':' + self._port + ').'));
+				}
+				
+				var err = false, status = 1;
+				if(endRequest)
+				{
+					endRequest = fcgi_parseEndRequest(endRequest);
+					status = endRequest.status;//readUInt32BE(0, true);
+					
+					var protocolStatus = endRequest.protocolStatus;//.readUInt8(4, true);
+					if(protocolStatus === PROTOCOL_STATUS.FCGI_CANT_MPX_CONN)
+					{
+						err = new Error('fast-cgi server rejected request: exceeds maximum number of concurrent requests.');
+					}
+					else if(protocolStatus === PROTOCOL_STATUS.FCGI_OVERLOADED)
+					{
+						err = new Error('fast-cgi server rejected request: resource not available (overloaded).');
+					}
+					else if(protocolStatus === PROTOCOL_STATUS.FCGI_UNKNOWN_ROLE)
+					{
+						err = new Error('fast-cgi server rejected request: FastCGI role not supported.');
+					}
+				}
+				else
+				{
+					err = new Error('Socket closed unexpectedly (fast-cgi protocol communication not finished).');
+				}
+				
+				handlers.onend(err, status);
+			});
+			
+			return socket;
+		};
+		
+		return self;
+		// php.request(headers, function(err, request)
+		
+	};
+})();
+
+
+//const fastCgi = require('fastcgi-client')
 const defaultOptions = {
   host: '127.0.0.1',
   port: 9000,
-  documentRoot: path.dirname(require.main.filename || '.'),
-  skipCheckServer: true
-}
+  documentRoot: path.dirname(require.main.filename || '.')
+};
+
 const CHAR_CODE_R = '\r'.charCodeAt(0);
 const CHAR_CODE_N = '\n'.charCodeAt(0);
 var parseHeader = function(header, res)
@@ -56,13 +451,9 @@ var parseHeader = function(header, res)
 const phpFpm = function(userOptions = {}, customParams = {})
 {
 	const options = Object.assign({}, defaultOptions, userOptions);
-	const fpm = new Promise((resolve, reject) => {
-		const loader = fastCgi(options);
-		loader.on('ready', () => resolve(loader));
-		loader.on('error', reject);
-	});
+	const phpfpm = fastcgiclient(options);
 	
-	return async function(req, res)
+	return function(req, res)
 	{
 		let params = Object.assign({}, customParams, {
 			uri: req.url
@@ -117,96 +508,66 @@ const phpFpm = function(userOptions = {}, customParams = {})
 				delete headers[header];
 			}
 		}
-
-		const php = await fpm;
+	
 		return new Promise(function(resolve, reject)
 		{
-			php.request(headers, function(err, request)
-			{
-				if(err)
+			var httpheader = '';
+			var headerSent = false;
+			// var socket =
+			phpfpm.request(headers, {
+				onconnect: function(phpRequest)
 				{
-					return reject(err);
-				}
-				var errors = ''
-
-				req.pipe(request.stdin)
-
-				var headerProcessed = false;
-				var header = '';
-				// on-readable will be called multiple times (for big files like images), but only the first time we process the header
-				request.stdout.on('readable', function()
-				{
-					var chunk;
-					if(!headerProcessed)
+					try
 					{
-						while(true)
+						// use read per request, so that we can wait for phpRequest.write to process the data
+						// this way we keep smooth transmission pipes
+						req.on('readable', async function()
 						{
-							chunk = request.stdout.read(1);
+							var chunk;
+							while((chunk = req.read()) !== null)
+							{
+								await phpRequest.write(chunk);
+							}
+						});
+						req.on('end', phpRequest.end);
+					}
+					catch(err)
+					{
+						phpRequest.destroy();
+						return reject(err);
+					}
+				},
+				onstdout: function(chunk)
+				{
+					// but we want to remove the header, and call writeHead as soon as we have the header from stdout
+					if(!headerSent)
+					{
+						httpheader += chunk.toString(); // to utf8
+						
+						var eoh = httpheader.indexOf('\r\n\r\n');
+						if(eoh >= 0)
+						{
+							parseHeader(httpheader.substring(0, eoh), res);
+							headerSent = true;
 							
-							if(chunk === null)
-							{
-								return; // chunk is null, so return instead of break, wait until another readable event is given
-							}
-							else if(chunk[0] === CHAR_CODE_R)
-							{
-								chunk = request.stdout.read(1);
-								if(chunk === null) break;
-								if(chunk[0] !== CHAR_CODE_N)
-								{
-									header += '\r';
-									header += chunk.toString('utf8');
-									continue;
-								}
-								chunk = request.stdout.read(1);
-								if(chunk === null) break;
-								if(chunk[0] !== CHAR_CODE_R)
-								{
-									header += '\r\n';
-									header += chunk.toString('utf8');
-									continue;
-								}
-								chunk = request.stdout.read(1);
-								if(chunk === null) break;
-								if(chunk[0] !== CHAR_CODE_N)
-								{
-									header += '\r\n\r';
-									header += chunk.toString('utf8');
-									continue;
-								}
-								// end of header detected
-								parseHeader(header, res);
-								headerProcessed = true;
-								break; // break so that we way continue to write the HTTP body in the next while loop
-							}
-							else
-							{
-								header += chunk.toString('utf8');
-							}
+							// convert the part of the chunk that is read too much back to a buffer, and write to response
+							res.write(Buffer.from(httpheader.substring(eoh + 4)));
 						}
+						return;
 					}
 					
-					while((chunk = request.stdout.read()) !== null)
-					{
-						res.write(chunk);
-					}
-				});
-
-				request.stderr.on('data', function(data)
+					// directly write stdout to response if we are in the http body
+					res.write(chunk);
+				},
+				onend: function(err, code)
 				{
-					errors += data.toString('utf8');
-				});
-
-				request.stdout.on('end', function()
-				{
-					if(errors)
+					if(err)
 					{
-						return reject(new Error(errors));
+						return reject(err);
 					}
-					// end the response
-					res.end();
-					// resolve the promise
-					resolve();
-				});
+					res.end(); // end response
+					resolve(); // resolve finally
+				}
 			});
 		});
 	};
@@ -223,6 +584,7 @@ const generateConfig = function(options)
 		'[global]',
 		'pid = ' + path + PHP_DIR + 'php-fpm.pid',
 		'error_log = ' + path + PHP_DIR + 'error.log',
+		'log_level = notice',
 		'daemonize = no',
 		'[www]',
 		'clear_env = no', // keep environment variables, otherwise set specifically with env[PATH] = '/usr/bin:..'
@@ -240,7 +602,9 @@ const generateConfig = function(options)
 		'php_admin_value[error_log] = ' + path + PHP_DIR + 'www-error.log',
 		'php_admin_flag[log_errors] = on',
 		'php_value[session.save_handler] = files',
-		'php_value[session.save_path] = ' + path + PHP_DIR + 'session'
+		'php_value[session.save_path] = ' + path + PHP_DIR + 'session',
+		'php_value[upload_max_size] = 40M',
+		'php_value[post_max_size] = 40M'
 	].join('\n');
 };
 const getPort = function(port = 9001)
@@ -315,7 +679,7 @@ module.exports = {
 			if(/^[^?]*\.php($|[?])/gi.test(req.url))
 			{
 				// console.log('running mod-php for: ' + req.url + ', ' + req.path);
-				phpHandler(req, res, next);
+				phpHandler(req, res, next).catch(console.error);
 			}
 			else
 			{
@@ -330,20 +694,12 @@ module.exports = {
 				{
 					return next(); // index.php does not exist
 				}
-				const uri = req.url.replace(/^[^?]*[/]/gi, $0 => $0 + 'index.php');
-				// Fix the req object, just send only the necessary properties
+				// fix url (insert index.php after the last slash but before querystring or hash)
+				// req.url = req.url.replace(/^[^?]*[/]/gi, function($0){return $0 + 'index.php';});
+				req.url = req.url.replace(/^([^#?]*\/)(.*)$/gi, function($0, $1, $2){return $1 + 'index.php' + $2;});
+				
 				// console.log('running mod-php for: ' + webdir + ' -> ' + uri);
-				phpHandler({
-					method: req.method,
-					headers: req.headers,
-					connection: req.connection,
-					protocol: req.protocol,
-					url: uri,
-					pipe: function(dst)
-					{
-						req.pipe(dst);
-					}
-				}, res, next);
+				phpHandler(req, res, next).catch(console.error);
 			});
 		});
 		
@@ -366,15 +722,19 @@ module.exports = {
 		// run php-fpm server
 		// console.log('php-fpm webdir: ' + webdir);
 		console.log('php-fpm listening on ' + host + ':' + port + ' using configuration file: ' + configFile);
-		child_process.execFile(options.exec || '/usr/sbin/php-fpm', ['--fpm-config=' + configFile], function(err, stdout, stderr)
+		var phpfpmInstance = child_process.spawn(options.exec || '/usr/sbin/php-fpm', ['--fpm-config=' + configFile]);
+		phpfpmInstance.on('close', function(code)
 		{
-			if(err)
-			{
-				console.error('Error starting php-fpm. PHP files will not be able to run.');
-				console.log(err);
-				return;
-			}
-			console.log('php-fpm finished');
+			console.log('mod-php: php-fpm crashed with code: ' + code);
+			throw new Error('php-fpm crashed, check php error log in local app .php directory');
+		});
+		phpfpmInstance.stdout.on('data', function(chunk)
+		{
+			console.log('mod-php: ' + chunk);
+		});
+		phpfpmInstance.stderr.on('data', function(err)
+		{
+			console.error('mod-php: ' + err);
 		});
 		
 		return {middleware: app, group: 'catch-extension'};
