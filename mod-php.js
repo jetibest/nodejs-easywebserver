@@ -47,7 +47,7 @@ const fastcgiclient = (function()
 	{
 		if(socket.destroyed || socket.pending)
 		{
-			return false; // socket is not ready yet
+			return new Promise(function(resolve, reject){reject(new Error('Socket is not connected' + (socket.pending ? ' yet' : '') + '.'));}); // socket is not ready yet
 		}
 		if(data === null)
 		{
@@ -74,27 +74,19 @@ const fastcgiclient = (function()
 			{
 				socket.write(buf, function()
 				{
-					if(paddingLen)
-					{
-						socket.write(data, function()
-						{
-							socket.write(PADDING_BUFS[paddingLen], resolve);
-						});
-					}
-					else
-					{
-						socket.write(data, resolve);
-					}
+					socket.write(data, paddingLen ? function(){ socket.write(PADDING_BUFS[paddingLen], resolve); } : resolve);
 				});
 			});
 		};
+		
 		var i = 0;
-		while(i < len - 0xffff)
+		while(i + 0xffff < len)
 		{
 			await sendpart(data, i, i += 0xffff);
 		}
 		await sendpart(data, i, len);
-		return true;
+		
+		return new Promise(function(resolve, reject){resolve(true);});
 	};
 	var fcgi_receive = (function()
 	{
@@ -294,22 +286,35 @@ const fastcgiclient = (function()
 				socket.setKeepAlive(true);
 				
 				// if we want to have serial processing, we would keep conn, and wait for end-request, and then send new begin-request for next connection
-				await fcgi_send(socket, MSG_TYPE.FCGI_BEGIN_REQUEST, reqId, BEGIN_REQUEST_DATA_NO_KEEP_CONN);
-				await fcgi_send(socket, MSG_TYPE.FCGI_PARAMS, reqId, fcgi_encodeparams(params));
-				await fcgi_send(socket, MSG_TYPE.FCGI_PARAMS, reqId, null); // why send null?
+				if(!await fcgi_send(socket, MSG_TYPE.FCGI_BEGIN_REQUEST, reqId, BEGIN_REQUEST_DATA_NO_KEEP_CONN).catch(console.error)) return;
+				if(!await fcgi_send(socket, MSG_TYPE.FCGI_PARAMS, reqId, fcgi_encodeparams(params)).catch(console.error)) return;
+				if(!await fcgi_send(socket, MSG_TYPE.FCGI_PARAMS, reqId, null).catch(console.error)) return; // why send null?
 				
+				console.log('connection initialized');
+				var writepromise = null;
 				handlers.onconnect({
-					write: function(data)
+					write: async function(data)
 					{
-						return fcgi_send(socket, MSG_TYPE.FCGI_STDIN, reqId, data);
+						console.log('writing: ' + data);
+						return writepromise = new Promise(function(resolve, reject)
+						{
+							fcgi_send(socket, MSG_TYPE.FCGI_STDIN, reqId, data).then(resolve).catch(reject);
+						});
 					},
-					end: function()
+					waitForWrites: async function()
 					{
-						return fcgi_send(socket, MSG_TYPE.FCGI_STDIN, reqId, null); // send null as EOF
+						if(!writepromise) return true;
+						return await writepromise;
 					},
-					abort: function()
+					end: async function(overrideWait)
 					{
-						return fcgi_send(socket, MSG_TYPE.FCGI_ABORT_REQUEST, reqId, Buffer.alloc(0));
+						if(!overrideWait && writepromise) await writepromise;
+						return await fcgi_send(socket, MSG_TYPE.FCGI_STDIN, reqId, null); // send null as EOF
+					},
+					abort: async function()
+					{
+						if(!overrideWait && writepromise) await writepromise;
+						return await fcgi_send(socket, MSG_TYPE.FCGI_ABORT_REQUEST, reqId, Buffer.alloc(0));
 					},
 					destroy: function()
 					{
