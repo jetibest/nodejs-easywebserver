@@ -290,12 +290,10 @@ const fastcgiclient = (function()
 				if(!await fcgi_send(socket, MSG_TYPE.FCGI_PARAMS, reqId, fcgi_encodeparams(params)).catch(console.error)) return;
 				if(!await fcgi_send(socket, MSG_TYPE.FCGI_PARAMS, reqId, null).catch(console.error)) return; // why send null?
 				
-				console.log('connection initialized');
 				var writepromise = null;
 				handlers.onconnect({
 					write: async function(data)
 					{
-						console.log('writing: ' + data);
 						return writepromise = new Promise(function(resolve, reject)
 						{
 							fcgi_send(socket, MSG_TYPE.FCGI_STDIN, reqId, data).then(resolve).catch(reject);
