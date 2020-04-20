@@ -12,7 +12,6 @@ module.exports = function(options)
 	this.group = 'error';
 	this.middleware = (req, res, next) =>
 	{
-		console.log('MOD-REROUTE');
 		if(code)
 		{
 			if(res.statusCode !== parseInt(code)) return next();
