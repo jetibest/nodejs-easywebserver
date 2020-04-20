@@ -8,8 +8,8 @@ const MOD_GROUP_ORDER = {
 	'catch-extension': 300,  // catch a specific extension (php, jsml)
 	'catch-default': 400,    // default module catch
 	'catch-all': 500,        // catch any resource (provide static resources)
-	'post-process': 600,     // process response
-	'error': 700
+	'error': 600,            // handle errors for whatever was not caught
+	'post-process': 700      // process response after it has already been sent (i.e. logging, or async request processing)
 };
 
 const self = module.exports = {

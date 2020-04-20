@@ -456,7 +456,7 @@ const phpFpm = function(userOptions = {}, customParams = {})
 	const options = Object.assign({}, defaultOptions, userOptions);
 	const phpfpm = fastcgiclient(options);
 	
-	return function(req, res)
+	return function(req, res, next)
 	{
 		let params = Object.assign({}, customParams, {
 			uri: req.url
@@ -577,7 +577,7 @@ const phpFpm = function(userOptions = {}, customParams = {})
 };
 
 
-const PHP_DIR = '.php/';
+// const PHP_DIR = '.php/';
 const generateConfig = function(options)
 {
 	options = options || {};
@@ -585,8 +585,8 @@ const generateConfig = function(options)
 	const host = options.host || '127.0.0.1';
 	return [
 		'[global]',
-		'pid = ' + path + PHP_DIR + 'php-fpm.pid',
-		'error_log = ' + path + PHP_DIR + 'error.log',
+		'pid = ' + path + 'php-fpm.pid',
+		'error_log = ' + path + 'error.log',
 		'log_level = notice',
 		'daemonize = no',
 		'[www]',
@@ -601,11 +601,11 @@ const generateConfig = function(options)
 		'pm.start_servers = 5',
 		'pm.min_spare_servers = 5',
 		'pm.max_spare_servers = 35',
-		'slowlog = ' + path + PHP_DIR + 'www-slow.log',
-		'php_admin_value[error_log] = ' + path + PHP_DIR + 'www-error.log',
+		'slowlog = ' + path + 'www-slow.log',
+		'php_admin_value[error_log] = ' + path + 'www-error.log',
 		'php_admin_flag[log_errors] = on',
 		'php_value[session.save_handler] = files',
-		'php_value[session.save_path] = ' + path + PHP_DIR + 'session',
+		'php_value[session.save_path] = ' + path + 'session',
 		'php_value[upload_max_size] = 40M',
 		'php_value[post_max_size] = 40M'
 	].join('\n');
@@ -641,8 +641,9 @@ const getPort = function(port = 9001)
 module.exports = async function(options)
 {
 	const mod = this;
-	const phpdir = path.resolve(__dirname, options.path || options.__dirname || __dirname);
-	const webdir = path.resolve(phpdir, options.webdir || 'public_html');
+	const phpdir = options.phpPath || path.resolve(path.resolve(__dirname, options.__dirname || __dirname), '.php');
+	// const webdir = path.resolve(phpdir, options.webdir || 'public_html');
+	const webdir = options.webdir || path.resolve(options.__dirname || __dirname, 'public_html');
 	const chrootedWebdir = webdir;//webdir.indexOf(phpdir) === 0 ? webdir.substring(phpdir.length) : webdir;
 	//if(chrootedWebdir === webdir)
 	//{
@@ -650,8 +651,9 @@ module.exports = async function(options)
 	//}
 	const host = options.host || '127.0.0.1';
 	const port = options.port || await getPort();
+	this._path = options.path || '/';
 	
-	await fs.promises.mkdir(path.resolve(phpdir, PHP_DIR)).catch(function(err)
+	await fs.promises.mkdir(phpdir).catch(function(err)
 	{
 		if(err.code === 'EEXIST')
 		{
@@ -660,7 +662,7 @@ module.exports = async function(options)
 		throw err;
 	});
 
-	await fs.promises.mkdir(path.resolve(path.resolve(phpdir, PHP_DIR), 'session')).catch(function(err)
+	await fs.promises.mkdir(path.resolve(phpdir, 'session')).catch(function(err)
 	{
 		if(err.code === 'EEXIST')
 		{
@@ -676,20 +678,21 @@ module.exports = async function(options)
 		host: host,
 		port: port
 	});
-	app.use(function(req, res, next)
+	app.use(async function(req, res, next)
 	{
 		if(/^[^?]*\.php($|[?])/gi.test(req.url))
 		{
-			phpHandler(req, res, next).catch(console.error);
+			await phpHandler(req, res, next).catch(console.error);
+			next();
 		}
 		else
 		{
 			next();
 		}
 	});
-	app.use('/', function(req, res, next)
+	app.use('/', async function(req, res, next)
 	{
-		fs.access(path.resolve(webdir, mod._options._easywebserver.getPath(req).substring(1) + 'index.php'), fs.constants.R_OK, function(err)
+		fs.access(path.resolve(webdir, mod._options._easywebserver.getPath(req).substring(1) + 'index.php'), fs.constants.R_OK, async function(err)
 		{
 			if(err)
 			{
@@ -701,11 +704,12 @@ module.exports = async function(options)
 			req.url = mod._options._easywebserver.replaceURLPath(p => p + 'index.php', req);
 			
 			// console.log('running mod-php for: ' + webdir + ' -> ' + uri);
-			phpHandler(req, res, next).catch(console.error);
+			await phpHandler(req, res, next).catch(console.error);
+			next();
 		});
 	});
 	
-	const configFile = path.resolve(phpdir, PHP_DIR + 'php-fpm.conf');
+	const configFile = path.resolve(phpdir, 'php-fpm.conf');
 	await fs.promises.writeFile(configFile, generateConfig({
 		path: phpdir,
 		host: host,
@@ -713,7 +717,7 @@ module.exports = async function(options)
 	}));
 	
 	// ensure apache ownership for .php (so it can store sessions)
-	child_process.exec('chown -R apache:apache ' + path.resolve(phpdir, PHP_DIR), function(err, stdout, stderr)
+	child_process.exec('chown -R apache:apache ' + phpdir, function(err, stdout, stderr)
 	{
 		if(err)
 		{

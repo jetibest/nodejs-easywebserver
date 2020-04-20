@@ -13,6 +13,7 @@ module.exports = function(options)
 		else
 		{
 			originalPath = originalPath.replace(/[?#].*$/gi, ''); // ensure path from header does not contain querystring or hash
+			originalPath = originalPath.replace(/^[^/]+:\/\//gi, '').replace(/^[^/]*/gi, ''); // remove the protocol/hostname/port
 		}
 		// if using a proxy, it has to provide the original path in a header
 		// redirect /app to /app/, ensure a trailing slash
@@ -22,7 +23,10 @@ module.exports = function(options)
 		// if trailing slash, or a dot (extension) is found, then do not redirect
 		if(originalPath.indexOf('.') !== -1 || originalPath.substr(-1) === '/') return next();
 		
-		res.redirect(302, mod._options._easywebserver.replaceURLPath(p => p + '/', req));
+		req.url = mod._options._easywebserver.replaceURLPath(p => p + '/', req);
+		
+		res.redirect(302, req.url);
+		next();
 	};
 	
 	console.log('mod-forcedir initialized, if using proxy, put the original path in header: x-forwarded-original-path');

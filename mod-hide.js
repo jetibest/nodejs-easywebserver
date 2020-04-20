@@ -1,6 +1,10 @@
 module.exports = function(options)
 {
 	const match = options.match || /^[^#?]*(^|\/)[.$_]/gi; // by default match any file starting with . or $ or _
+	if(typeof match === 'string')
+	{
+		match = new RegExp(match, 'gi');
+	}
 	
 	this.group = 'pre-route';
 	this.middleware = (req, res, next) =>
