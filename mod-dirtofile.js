@@ -47,7 +47,7 @@ module.exports = function(options)
 		var filepath = path.resolve(mod.webdir, reqPath.replace(/^\//gi, ''));
 		fs.access(filepath, fs.constants.R_OK, function(err, res)
 		{
-			if(!err) return console.log('directory exists: ' + filepath) || next(); // no error, so directory exists already
+			if(!err) return next(); // no error, so directory exists already
 			
 			findExtension(
 				req,
