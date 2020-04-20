@@ -41,7 +41,7 @@ module.exports = function(options)
 		var reqPath = mod._options._easywebserver.getPath(req);
 		
 		// special case for the current root directory or if no trailing slash
-		if(!reqPath || reqPath === '/' || !(/(\/)?$/gi.test(reqPath))) return console.log('path does not match') || next();
+		if(!reqPath || reqPath === '/' || !(/(\/)?$/gi.test(reqPath))) return next();
 		
 		// check if directory exists
 		var filepath = path.resolve(mod.webdir, reqPath.replace(/^\//gi, ''));
