@@ -6,9 +6,10 @@ const MOD_GROUP_ORDER = {
 	'pre-route': 100,        // redirects (path fixing)
 	'pre-process': 200,      // process request (headers, fileupload)
 	'catch-extension': 300,  // catch a specific extension (php, jsml)
-	'catch-default': 400,
-	'catch-all': 500,       // catch any resource (provide static resources)
-	'post-process': 600     // process response
+	'catch-default': 400,    // default module catch
+	'catch-all': 500,        // catch any resource (provide static resources)
+	'post-process': 600,     // process response
+	'error': 700
 };
 
 const self = module.exports = {
@@ -33,6 +34,16 @@ const self = module.exports = {
 		}
 		else if(typeof options === 'object' && Array.isArray(options))
 		{
+			var optionmodules = [];
+			for(var i=0;i<options.length;++i)
+			{
+				if(typeof options[i] !== 'string') continue;
+				var submods = options[i].split(',');
+				if(submods.length > 1)
+				{
+					options.splice.apply(options, [i, 1].concat(submods));
+				}
+			}
 			options = {modules: options};
 		}
 		const DIRNAME = (module.parent ? path.dirname(module.parent.filename) : '') || __dirname;
@@ -43,30 +54,73 @@ const self = module.exports = {
 		const s = {
 			_modules: []
 		};
-		s.mod = async function(module)
+		s.mod = async function(moduleopts)
 		{
-			if(typeof module === 'string')
+			// Try parse as JSON
+			if(typeof moduleopts === 'string')
 			{
-				module = {name: module};
+				try
+				{
+					if(moduleopts.length && moduleopts.charAt(0) === '{')
+					{
+						moduleopts = JSON.parse(moduleopts);
+					}
+				}
+				catch(err) {}
 			}
-			module.__dirname = options.path || DIRNAME;
-			module.webdir = module.webdir || options.webdir; // take webdir option from parent
-			module.host = module.host || options.host;
+			// Try to check for embedded name options combination (NAME:K=V:K=V:K=V)
+			if(typeof moduleopts === 'string')
+			{
+				// dashes are allowed in keys, which transforms some-property into someProperty
+				// whatever splitter is used does not matter, as long as it is one char
+				// the first part is always set to the name, the rest is set to the options for the module
+				if(/^[a-z0-9./-]+[^a-z0-9./-][a-z0-9_-]+=/gi.test(moduleopts))
+				{
+					var splitchr = moduleopts.replace(/^[a-z0-9./-]+([^a-z0-9./-]).*$/gi, ($0, $1) => $1);
+					var parts = moduleopts.split(splitchr);
+					moduleopts = {name: parts.shift(), options: {}};
+					for(var i=0;i<parts.length;++i)
+					{
+						var part = parts[i];
+						var offset = part.indexOf('=');
+						if(offset >= 0)
+						{
+							moduleopts.options[part.substring(0, offset).replace(/-[a-z]/gi, $0 => $0.charAt(1).toUpperCase())] = part.substring(offset + 1);
+						}
+						else
+						{
+							moduleopts.options[part.replace(/-[a-z]/gi, $0 => $0.charAt(1).toUpperCase())] = true;
+						}
+					}
+				}
+			}
+			// Assume string is module name
+			if(typeof moduleopts === 'string')
+			{
+				moduleopts = {name: moduleopts};
+			}
+			
+			// set default options guaranteed to exist before requiring module
+			moduleopts.__dirname = options.path || DIRNAME;
+			moduleopts.webdir = moduleopts.webdir || options.webdir; // take webdir option from parent
+			moduleopts.host = moduleopts.host || options.host;
+			moduleopts._easywebserver = s;
+			moduleopts._options = moduleopts;
+			
 			return new Promise(async function(resolve, reject)
 			{
 				// check with fs.access if we can read mod-name.js, otherwise throw error that module does not exist
-				var m;
-				if(module.middleware)
+				var m = moduleopts;
+				if(!m.middleware)
 				{
-					m = module;
+					var createfn = require(moduleopts.filename || (path.resolve(moduleopts.path || __dirname, 'mod-' + moduleopts.name + '.js')));
+					if(typeof createfn !== 'function') createfn = createfn.create;
+					m = (await createfn.call(moduleopts, moduleopts.options || moduleopts)) || moduleopts; // if no return value, then we assume `this` object was manipulated
 				}
-				else
-				{
-					m = await require(module.filename || (path.resolve(module.path || __dirname, 'mod-' + module.name + '.js'))).create.call(module, module.options || module);
-				}
-				m._options = module;
-				m.group = module.group || m.group || 'catch-default';
-				m.priority = module.priority || m.priority || 100;
+				m._options = moduleopts;
+				m.name = moduleopts.name || m.name || moduleopts.filename || '';
+				m.group = moduleopts.group || m.group || 'catch-default';
+				m.priority = moduleopts.priority || m.priority || 100;
 				s._modules.push(m);
 				resolve(m);
 			});
@@ -80,7 +134,7 @@ const self = module.exports = {
 		{
 			s._modules.forEach(function(m)
 			{
-				if(m._options.name === moduleName)
+				if(m.name === moduleName)
 				{
 					m._disabled = true;
 				}
@@ -90,15 +144,83 @@ const self = module.exports = {
 		{
 			s._modules.forEach(function(m)
 			{
-				if(m._options.name === moduleName)
+				if(m.name === moduleName)
 				{
 					m._disabled = false;
 				}
 			});
 		};
+		s.getPath = function(req)
+		{
+			return req.url.replace(/[?#].*$/gi, '');
+		};
+		s.replaceURLPath = function(match, replacement, req)
+		{
+			if(typeof replacement === 'object')
+			{
+				req = replacement;
+				replacement = match;
+				match = /^.*$/gi; // if no match, then replace the whole path
+			}
+			else if(typeof match === 'object')
+			{
+				match.lastIndex = 0;
+			}
+			var path = s.getPath(req);
+			return path.replace(match, replacement) + (req.url.substring(((path || '') +'').length) || '');
+		};
+		s.reroute = (function()
+		{
+			const REROUTE_RECURSION_LIMIT = s._REROUTE_RECURSION_LIMIT || 100;
+			const getFirstHandle = function(r)
+			{
+				if(r.handle) return r.handle;
+				r = r._router || r;
+				var handle = false;
+				var ms = (r.stack || []);
+				for(var i=0;i<ms.length;++i)
+				{
+					if(handle = getFirstHandle(ms[i])) return handle;
+				}
+				return handle;
+			};
+			return function(path, req, res, next)
+			{
+				// detect recursion (limit recursion at 100)
+				if(req.reroute === path && req.rerouteCount < REROUTE_RECURSION_LIMIT)
+				{
+					console.error('easywebserver.reroute: Reroute recursion detected for path: ' + path + ' (' + (req.rerouteCount || 1) + 'x)');
+					return res.status(500).end();
+				}
+				req.reroute = path;
+				req.rerouteCount = (req.rerouteCount || 1) + 1;
+				
+				var h = getFirstHandle(req.app || s._app);
+				if(typeof h !== 'function') throw new Error('easywebserver.reroute: No handle found.');
+				
+				req.url = s.replaceURLPath(path, req);
+				
+				h.call(req.app || s._app, req, res, next);
+			};
+		})();
+		s.listModuleChain = function()
+		{
+			var arr = [];
+			s._modules.forEach(m => arr.push(m.name));
+			return arr.join(' -> ');
+		};
 		s.listen = function(port)
 		{
-			const app = express.Router({strict: true});
+			const app = s._app = express.Router({strict: true});
+			
+			// use modmw to set the 'this' keyword as the module instance
+			const modmw = function(m)
+			{
+				return function(req, res, next)
+				{
+					m.middleware.apply(m, arguments);
+				};
+			};
 			
 			s._modules.sort(function(a, b)
 			{
@@ -113,18 +235,18 @@ const self = module.exports = {
 			{
 				if(m && !m._disabled)
 				{
-					if(m.path)
+					if(m._path)
 					{
-						console.log('app.use ' + m.path + ', ' + m._options.name);
-						app.use(m.path, m.middleware);
+						app.use(m._path, modmw(m));
 					}
 					else
 					{
-						console.log('app.use ' + m._options.name);
-						app.use(m.middleware);
+						app.use(modmw(m));
 					}
 				}
 			});
+			
+			console.log(s.listModuleChain());
 			
 			s._server = express({strict: true}).use(app).listen(port || 8080);
 			

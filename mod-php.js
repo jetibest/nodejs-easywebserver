@@ -638,108 +638,108 @@ const getPort = function(port = 9001)
 	});
 };
 
-module.exports = {
-	create: async function(options)
-	{
-		options = options || {};
-		const phpdir = path.resolve(__dirname, options.path || options.__dirname || __dirname);
-		const webdir = path.resolve(phpdir, options.webdir || 'public_html');
-		const chrootedWebdir = webdir;//webdir.indexOf(phpdir) === 0 ? webdir.substring(phpdir.length) : webdir;
-		//if(chrootedWebdir === webdir)
-		//{
-		//	console.log('[mod-php.js] warning: webdir (' + webdir + ') is not within path (' + phpdir + '), chroot will fail.');
-		//}
-		const host = options.host || '127.0.0.1';
-		const port = options.port || await getPort();
-		
-		await fs.promises.mkdir(path.resolve(phpdir, PHP_DIR)).catch(function(err)
-		{
-			if(err.code === 'EEXIST')
-			{
-				return;
-			}
-			throw err;
-		});
+module.exports = async function(options)
+{
+	const mod = this;
+	const phpdir = path.resolve(__dirname, options.path || options.__dirname || __dirname);
+	const webdir = path.resolve(phpdir, options.webdir || 'public_html');
+	const chrootedWebdir = webdir;//webdir.indexOf(phpdir) === 0 ? webdir.substring(phpdir.length) : webdir;
+	//if(chrootedWebdir === webdir)
+	//{
+	//	console.log('[mod-php.js] warning: webdir (' + webdir + ') is not within path (' + phpdir + '), chroot will fail.');
+	//}
+	const host = options.host || '127.0.0.1';
+	const port = options.port || await getPort();
 	
-		await fs.promises.mkdir(path.resolve(path.resolve(phpdir, PHP_DIR), 'session')).catch(function(err)
+	await fs.promises.mkdir(path.resolve(phpdir, PHP_DIR)).catch(function(err)
+	{
+		if(err.code === 'EEXIST')
 		{
-			if(err.code === 'EEXIST')
-			{
-				return;
-			}
-			throw err;
-		});
-		
-		// console.log('php-fpm using documentRoot: ' + webdir + ', phpdir: ' + phpdir + ', chrooted webdir: ' + webdir);
-		const app = express.Router({strict: true});
-		const phpHandler = phpFpm({
-			documentRoot: chrootedWebdir,
-			host: host,
-			port: port
-		});
-		app.use(function(req, res, next)
+			return;
+		}
+		throw err;
+	});
+
+	await fs.promises.mkdir(path.resolve(path.resolve(phpdir, PHP_DIR), 'session')).catch(function(err)
+	{
+		if(err.code === 'EEXIST')
 		{
-			if(/^[^?]*\.php($|[?])/gi.test(req.url))
-			{
-				// console.log('running mod-php for: ' + req.url + ', ' + req.path);
-				phpHandler(req, res, next).catch(console.error);
-			}
-			else
-			{
-				next();
-			}
-		});
-		app.use('/', function(req, res, next)
+			return;
+		}
+		throw err;
+	});
+	
+	// console.log('php-fpm using documentRoot: ' + webdir + ', phpdir: ' + phpdir + ', chrooted webdir: ' + webdir);
+	const app = express.Router({strict: true});
+	const phpHandler = phpFpm({
+		documentRoot: chrootedWebdir,
+		host: host,
+		port: port
+	});
+	app.use(function(req, res, next)
+	{
+		if(/^[^?]*\.php($|[?])/gi.test(req.url))
 		{
-			fs.access(path.resolve(webdir, req.path.substring(1) + 'index.php'), fs.constants.R_OK, function(err)
-			{
-				if(err)
-				{
-					return next(); // index.php does not exist
-				}
-				// fix url (insert index.php after the last slash but before querystring or hash)
-				// req.url = req.url.replace(/^[^?]*[/]/gi, function($0){return $0 + 'index.php';});
-				req.url = req.url.replace(/^([^#?]*\/)(.*)$/gi, function($0, $1, $2){return $1 + 'index.php' + $2;});
-				
-				// console.log('running mod-php for: ' + webdir + ' -> ' + uri);
-				phpHandler(req, res, next).catch(console.error);
-			});
-		});
-		
-		const configFile = path.resolve(phpdir, PHP_DIR + 'php-fpm.conf');
-		await fs.promises.writeFile(configFile, generateConfig({
-			path: phpdir,
-			host: host,
-			port: port
-		}));
-		
-		// ensure apache ownership for .php (so it can store sessions)
-		child_process.exec('chown -R apache:apache ' + path.resolve(phpdir, PHP_DIR), function(err, stdout, stderr)
+			phpHandler(req, res, next).catch(console.error);
+		}
+		else
+		{
+			next();
+		}
+	});
+	app.use('/', function(req, res, next)
+	{
+		fs.access(path.resolve(webdir, mod._options._easywebserver.getPath(req).substring(1) + 'index.php'), fs.constants.R_OK, function(err)
 		{
 			if(err)
 			{
-				throw err;
+				return next(); // index.php does not exist
 			}
+			// fix url (insert index.php after the last slash but before querystring or hash)
+			// req.url = req.url.replace(/^[^?]*[/]/gi, function($0){return $0 + 'index.php';});
+			// req.url = req.url.replace(/^([^#?]*\/)(.*)$/gi, function($0, $1, $2){return $1 + 'index.php' + $2;});
+			req.url = mod._options._easywebserver.replaceURLPath(p => p + 'index.php', req);
+			
+			// console.log('running mod-php for: ' + webdir + ' -> ' + uri);
+			phpHandler(req, res, next).catch(console.error);
 		});
-		
-		// run php-fpm server
-		// console.log('php-fpm webdir: ' + webdir);
-		console.log('php-fpm listening on ' + host + ':' + port + ' using configuration file: ' + configFile);
-		var phpfpmInstance = child_process.spawn(options.exec || '/usr/sbin/php-fpm', ['--fpm-config=' + configFile]);
-		phpfpmInstance.on('close', function(code)
+	});
+	
+	const configFile = path.resolve(phpdir, PHP_DIR + 'php-fpm.conf');
+	await fs.promises.writeFile(configFile, generateConfig({
+		path: phpdir,
+		host: host,
+		port: port
+	}));
+	
+	// ensure apache ownership for .php (so it can store sessions)
+	child_process.exec('chown -R apache:apache ' + path.resolve(phpdir, PHP_DIR), function(err, stdout, stderr)
+	{
+		if(err)
 		{
-			console.log('mod-php: php-fpm crashed with code: ' + code);
-			throw new Error('php-fpm crashed, check php error log in local app .php directory');
-		});
-		phpfpmInstance.stdout.on('data', function(chunk)
-		{
-			console.log('mod-php: ' + chunk);
-		});
-		phpfpmInstance.stderr.on('data', function(err)
-		{
-			console.error('mod-php: ' + err);
-		});
-		
-		return {middleware: app, group: 'catch-extension'};
-	}
+			throw err;
+		}
+	});
+	
+	// run php-fpm server
+	// console.log('php-fpm webdir: ' + webdir);
+	var phpfpmInstance = child_process.spawn(options.exec || '/usr/sbin/php-fpm', ['--fpm-config=' + configFile]);
+	phpfpmInstance.on('close', function(code)
+	{
+		console.log('mod-php: php-fpm crashed with code: ' + code);
+		throw new Error('php-fpm crashed, check php error log in local app .php directory');
+	});
+	phpfpmInstance.stdout.on('data', function(chunk)
+	{
+		console.log('mod-php: ' + chunk);
+	});
+	phpfpmInstance.stderr.on('data', function(err)
+	{
+		console.error('mod-php: ' + err);
+	});
+	
+	console.log('mod-php initialized php-fpm on ' + host + ':' + port + ' using configuration file: ' + configFile);
+	
+	this.middleware = app;
+	this.group = 'catch-extension';
 };

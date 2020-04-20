@@ -1,30 +1,32 @@
 module.exports = {
 	create: function(options)
 	{
-		console.log('mod-urlrewrite initialized, rewrite url (path after base-servlet url) with regex');
 		var mod = this;
-		mod.regexes = options.regexes || [];
-		mod.rewrite = function(regex)
+		
+		mod.match = typeof options.match === 'string' && new RegExp(options.match, 'gi') || options.match;
+		
+		// match replacement (default: delete the matched part)
+		mod.path = options.path || '';
+		
+		mod.group = 'pre-route';
+		mod.middleware = function(req, res, next)
 		{
-			if(typeof regex === 'string')
+			if(typeof mod.match === 'function')
 			{
-				regex = new RegExp(regex, 'gi');
+				if(!mod.match.call(mod, req.url, req, res)) return next();
 			}
-			mod.regexes.push(regex);
-			return mod;
+			
+			mod.match.lastIndex = 0; // reset global index
+			req.url = req.url.replace(mod.match, mod.path);
+			
+			next();
 		};
-		return {
-			group: 'pre-route',
-			middleware: function(req, res, next)
-			{
-				// Rewrite url with regex, usually this would be to let /page/ refer to /page.html
-				for(var i=0;i<mod.regexes.length;++i)
-				{
-					req.url = req.url.replace(mod.regexes[i], '');
-				}
-				next();
-			}
-		};
+		
+		if(!mod.match) throw new Error('mod-urlrewrite failed to initialize, because it requires a match option (function or regex)');
+		
+		console.log('mod-urlrewrite initialized, rewrite url (path after base-servlet url) with regex');
+		
+		return mod;
 	}
 };
 

@@ -1,40 +1,19 @@
-module.exports = {
-	create: function(options)
+module.exports = function(options)
+{
+	const match = options.match || /^[^#?]*(^|\/)[.$_]/gi; // by default match any file starting with . or $ or _
+	
+	this.group = 'pre-route';
+	this.middleware = (req, res, next) =>
 	{
-		options = options || {};
-		console.log('mod-hide initialized, files and directories that are intended to stay hidden cannot be accessed by a path (default=/(^|/)[.$_]/gi), the regex applies to the whole path.');
-		var mod = this;
-		mod.regexes = options.regexes || [/(^|\/)[.$_]/gi];
-		mod.reset = function()
+		match.lastIndex = 0; // reset regex
+		
+		if(match.test(req.url))
 		{
-			mod.regexes = options.regexes || [];
-			return mod;
-		};
-		mod.hide = function(regex)
-		{
-			if(typeof regex === 'string')
-			{
-				regex = new RegExp(regex, 'gi');
-			}
-			mod.regexes.push(regex);
-			return mod;
-		};
-		return {
-			group: 'pre-route',
-			middleware: function(req, res, next)
-			{
-				for(var i=0;i<mod.regexes.length;++i)
-				{
-					if(mod.regexes[i].test(req.url))
-					{
-						console.log('mod-hide: access to this url is forbidden (' + req.url + ')');
-						res.status(403);
-						res.end();
-						return;
-					}
-				}
-				next();
-			}
-		};
-	}
+			console.log('mod-hide: sent 403 for url: ' + req.url);
+			return res.status(403).end();
+		}
+		next();
+	};
+	
+	console.log('mod-hide initialized with match: ' + match + ', files and directories that are intended to stay hidden cannot be accessed by a path, the regex applies to the path and following querystring and/or hash.');
 };
