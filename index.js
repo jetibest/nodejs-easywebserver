@@ -200,7 +200,7 @@ const self = module.exports = {
 				
 				req.url = s.replaceURLPath(path, req);
 				
-				h.call(req.app || s._app, req, res, next);
+				h.call(req.app || s._app, req, res, function(){}); // no next, because reroute moves backward in the chain
 			};
 		})();
 		s.listModuleChain = function()
@@ -247,6 +247,17 @@ const self = module.exports = {
 			});
 			
 			console.log(s.listModuleChain());
+			
+			// Final built-in module, that always ensures the response is ended
+			app.use(function(req, res, next)
+			{
+				if(res.headersSent) return next();
+				
+				console.error('error: At end of module chain, URL still not caught: ' + req.originalUrl);
+				res.set('Content-Type', 'text/plain; charset=UTF-8');
+				res.end('Error: URL not caught: ' + req.originalUrl);
+				next();
+			});
 			
 			s._server = express({strict: true}).use(app).listen(port || 8080);
 			

@@ -1,10 +1,15 @@
-# nodejs-easywebserver
+# nodejs-easywebserver (UNDER DEVELOPMENT)
 
 A portable easy-to-use webserver with a one-liner for Unix/Linux using only Node.js and Express.js.
 
 Easywebserver is a wrapper around [Express.js](https://expressjs.com/) with no additional dependencies (unless the mods require it, e.g. `php-fpm` for `mod-php`), which is based on the default Node.js [`http.Server`](https://nodejs.org/api/http.html#http_class_http_server).
 It allows you to run a portable flexible and configurable webserver with just one line of code.
 Additional functionality comes with extra mods which default to a configuration that fits a specific use-case.
+
+# Disclaimer
+Understand that this software is under development, and is still potentially unstable.
+Use at own risk.
+Make sure to checkout the source code for your concerns.
 
 # Installation
 ```bash

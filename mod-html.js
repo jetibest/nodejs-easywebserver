@@ -1,18 +1,32 @@
 const path = require('path');
-const express = require('express');
+const send = require('send');
 
 module.exports = function(options)
 {
 	const mod = this;
-	const webdir = options.webdir || path.resolve(options.__dirname || __dirname, 'public_html');
-	const staticmiddleware = express.static(webdir);
+	const webdir = path.resolve(options.webdir || path.resolve(options.__dirname || __dirname, 'public_html'));
 	
 	this._path = options.path || '/';
 	this.middleware = function(req, res, next)
 	{
 		if(res.headersSent) return next();
+	
+		if(req.method !== 'GET' && req.method !== 'HEAD') return next();
 		
-		staticmiddleware(req, res, next);
+		var nextwrap = function()
+		{
+			if(!next) return;
+			next();
+			next = null;
+		};
+		var s = send(req, req.url.replace(/[?#].*$/gi, ''), {root: webdir});
+		s.on('error', function(err)
+		{
+			res.statusCode = err.status || 500;
+			nextwrap(); // if error, end is not called (wrap next-call to ensure)
+		});
+		s.on('end', nextwrap);
+		s.pipe(res);
 	};
 	this.group = 'catch-all';
 	

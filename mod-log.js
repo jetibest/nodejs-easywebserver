@@ -10,8 +10,8 @@ module.exports = function(options)
 		{
 			var statusGroup = Math.floor(res.statusCode / 100);
 			
-			if((level === 'error' || level === 'v') && res.statusCode < 5) return next();
-			if((level === 'warning' || level === 'vv') && res.statusCode < 4) return next();
+			if((level === 'error' || level === 'v') && statusGroup < 5) return next();
+			if((level === 'warning' || level === 'vv') && statusGroup < 4) return next();
 			// if((level === 'access' || level === 'vvv') && false) return next();
 			
 			if(method)

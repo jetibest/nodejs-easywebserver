@@ -33,7 +33,7 @@ module.exports = function(options)
 			return path.call(this, req, res, next); 
 		}
 		
-		this._options._easywebserver.reroute(path, req, res, next);
+		this._options._easywebserver.reroute(path, req, res);
 	};
 	
 	console.log('mod-reroute initialized matching ' + match + ' (code=' + (code || '*') + ') to path: ' + path);

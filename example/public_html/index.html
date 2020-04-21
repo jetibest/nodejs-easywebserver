@@ -1,18 +1,63 @@
 <!DOCTYPE html>
 <html>
 <head>
-	<title>EasyWebServer for NodeJS</title>
+	<meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
+	<title>EasyWebServer for Node.js</title>
+	<style type="text/css">
+	html, body
+	{line-height: 150%;background-color: #f6f6f6;font-family: sans-serif;font-size: 17px;}
+	.inline-code
+	{font-family: monospace;background-color: #eee;display: inline-block;line-height: inherit;}
+	</style>
 </head>
 <body>
-	<h1>Multifunctional webserver</h1>
-	<h2>Running on NodeJS</h2>
+	<h1>Welcome to Easywebserver</h1>
+	<h2>Running on Node.js</h2>
 	<p>
-		Included modules:
+		Easywebserver is basically a wrapper for Express.js, and makes running a webserver a one-liner.
+		Flexibility is provided by modules.
+		These mods are included by default:
 	</p>
 	<ul>
-		<li><b>forcedir</b>: Ensures a redirect with trailing slash for directories.</li>
-		<li><b>php</b>: Support for php files using the php-fpm executable.</li>
-		<li><b>html</b>: Serving static files using Express.</li>
+		<li>
+			<strong>[pre-route] mod-dirtofile</strong>
+			Match extension based on directory-based pathname.
+			For instance, <span class="inline-code">/page/</span> may internally route to <span class="inline-code">/page.html</span>.
+		<li>
+			<strong>[pre-route] mod-forcedir</strong>
+			Ensures a trailing slash in the pathname using a redirect (302).
+			For instance, <span class="inline-code">/page</span> may redirect to <span class="inline-code">/page/</span>.
+		</li>
+		<li>
+			<strong>[pre-route] mod-hide</strong>
+			Blocks access to directories or files based on a regular expression.
+			Defaults to blocking files and directories starting with <span class="inline-code">.</span>, <span class="inline-code">_</span>, and <span class="inline-code">$</span>.
+		</li>
+		<li>
+			<strong>[pre-route] mod-urlrewrite</strong>
+			Generic regular expression-based URL rewriting for internal routing only (no redirects, meaning the rewriting is not visible for clients i.e. in the address bar).
+		</li>
+		<li>
+			<strong>[catch-extension] mod-php</strong>
+			Enable delivery of PHP-files (<span class="inline-code">.php</span>) using <span class="inline-code">php-fpm</span>. This mod will run its own <span class="inline-code">php-fpm</span> daemon.
+		</li>
+		<li>
+			<strong>[catch-all] mod-html</strong>
+			Enable delivery of static files such as <span class="inline-code">.html</span>, <span class="inline-code">.css</span>, <span class="inline-code">.js</span>, <span class="inline-code">.jpg</span>, etc. in the <span class="inline-code">public_html</span> directory.
+		</li>
+		<li>
+			<strong>[error] mod-reroute</strong>
+			Reroute the request to a different path, given a match is found.
+			This is an internal redirect, sending the Request and Response object back to square one (to the first middleware handler of the app).
+			By default reroutes to <span class="inline-code">/http-404.html</span>.
+		</li>
+		<li>
+			<strong>[post-process] mod-log</strong>
+			Basic logging to stdout.
 	</ul>
+	<p>
+		For better documentation, check out <a href="https://github.com/jetibest/nodejs-easywebserver" target="_blank">the Readme.md on github.com</a>.
+	</p>
+	
 </body>
 </html>
