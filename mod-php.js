@@ -643,7 +643,7 @@ module.exports = async function(options)
 	const mod = this;
 	const phpdir = options.phpPath || path.resolve(path.resolve(__dirname, options.__dirname || __dirname), '.php');
 	// const webdir = path.resolve(phpdir, options.webdir || 'public_html');
-	const webdir = options.webdir || path.resolve(options.__dirname || __dirname, 'public_html');
+	const webdir = options.webdir || mod.webdir || path.resolve(options.__dirname || __dirname, 'public_html');
 	const chrootedWebdir = webdir;//webdir.indexOf(phpdir) === 0 ? webdir.substring(phpdir.length) : webdir;
 	//if(chrootedWebdir === webdir)
 	//{
@@ -671,7 +671,7 @@ module.exports = async function(options)
 		throw err;
 	});
 	
-	// console.log('php-fpm using documentRoot: ' + webdir + ', phpdir: ' + phpdir + ', chrooted webdir: ' + webdir);
+	// console.log('php-fpm using documentRoot: ' + webdir + ', phpdir: ' + phpdir + ', chrooted webdir: ' + chrootedWebdir);
 	const app = express.Router({strict: true});
 	const phpHandler = phpFpm({
 		documentRoot: chrootedWebdir,

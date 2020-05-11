@@ -4,7 +4,7 @@ const send = require('send');
 module.exports = function(options)
 {
 	const mod = this;
-	const webdir = path.resolve(options.webdir || path.resolve(options.__dirname || __dirname, 'public_html'));
+	const webdir = path.resolve(options.webdir || this.webdir || path.resolve(options.__dirname || __dirname, 'public_html'));
 	
 	this._path = options.path || '/';
 	this.middleware = function(req, res, next)
