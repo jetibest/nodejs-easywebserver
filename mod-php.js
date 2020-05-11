@@ -591,8 +591,8 @@ const generateConfig = function(options)
 		'daemonize = no',
 		'[www]',
 		'clear_env = no', // keep environment variables, otherwise set specifically with env[PATH] = '/usr/bin:..'
-		'user = ' + (options.user || 'apache'),
-		'group = ' + (options.group || options.user || 'apache'),
+		'user = ' + (options.phpUser || 'apache'),
+		'group = ' + (options.phpGroup || options.phpUser || 'apache'),
 		// 'chroot = ' + path, -> chroot for php-fpm is broken
 		'listen = ' + host + ':' + (options.port || '8081'),
 		'listen.allowed_clients = ' + (options.whitelist || (host === '127.0.0.1' ? '127.0.0.1' : 'any')),
@@ -652,6 +652,8 @@ module.exports = async function(options)
 	const host = options.host || '127.0.0.1';
 	const port = options.port || await getPort();
 	this._path = options.path || '/';
+	const phpUser = options.phpUser || 'apache';
+	const phpGroup = options.phpGroup || options.phpUser || 'apache';
 	
 	await fs.promises.mkdir(phpdir).catch(function(err)
 	{
@@ -713,11 +715,13 @@ module.exports = async function(options)
 	await fs.promises.writeFile(configFile, generateConfig({
 		path: phpdir,
 		host: host,
-		port: port
+		port: port,
+		phpUser: phpUser,
+		phpGroup: phpGroup
 	}));
 	
 	// ensure apache ownership for .php (so it can store sessions)
-	child_process.exec('chown -R apache:apache ' + phpdir, function(err, stdout, stderr)
+	child_process.exec('chown -R ' + phpUser + ':' + phpGroup + ' ' + phpdir, function(err, stdout, stderr)
 	{
 		if(err)
 		{
