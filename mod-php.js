@@ -459,7 +459,9 @@ const phpFpm = function(userOptions = {}, customParams = {})
 	return function(req, res, next)
 	{
 		let params = Object.assign({}, customParams, {
-			uri: req.url
+			reqUri: req.headers['x-forwarded-original-path'] || req.headers['x-forwarded-path'] || req.url,
+			uri: req.url,
+			protocol: req.headers['x-forwarded-original-proto'] || req.headers['x-forwarded-proto'] || req.protocol
 		});
 		
 		if(!params.uri || !params.uri.startsWith('/'))
@@ -479,7 +481,7 @@ const phpFpm = function(userOptions = {}, customParams = {})
 		{
 			params.script = path.join(options.documentRoot, params.document || params.uri);
 		}
-
+		
 		const headers = {
 			REQUEST_METHOD: req.method,
 			CONTENT_TYPE: req.headers['content-type'],
@@ -488,11 +490,11 @@ const phpFpm = function(userOptions = {}, customParams = {})
 			DOCUMENT_ROOT: options.documentRoot,
 			SCRIPT_FILENAME: params.script,
 			SCRIPT_NAME: params.script.split('/').pop(),
-			REQUEST_URI: params.outerUri || params.uri,
+			REQUEST_URI: params.outerUri || params.reqUri,
 			DOCUMENT_URI: params.document || params.uri,
 			QUERY_STRING: params.query,
-			REQUEST_SCHEME: req.protocol,
-			HTTPS: req.protocol === 'https' ? 'on' : undefined,
+			REQUEST_SCHEME: params.protocol,
+			HTTPS: params.protocol === 'https' ? 'on' : undefined,
 			REMOTE_ADDR: req.connection.remoteAddress,
 			REMOTE_PORT: req.connection.remotePort,
 			SERVER_NAME: req.connection.domain,
