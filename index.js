@@ -28,32 +28,49 @@ const self = module.exports = {
 	},
 	createAsync: async function(options)
 	{
-		if(typeof options === 'string')
+		options = options || {};
+		
+		if(!(typeof options === 'object' && !Array.isArray(options)))
 		{
-			options = {modules: options.split(',')};
+			options.modules = options;
 		}
-		else if(typeof options === 'object' && Array.isArray(options))
+		
+		if(typeof options.modules === 'string')
 		{
-			var optionmodules = [];
-			for(var i=0;i<options.length;++i)
+			options.modules = options.modules.split(/(?<!\\),/).map(m => m.trim());
+		}
+		else if(typeof options.modules === 'object')
+		{
+			if(Array.isArray(options.modules))
 			{
-				if(typeof options[i] !== 'string') continue;
-				var submods = options[i].split(',');
-				if(submods.length > 1)
+				for(var i=0;i<options.modules.length;++i)
 				{
-					options.splice.apply(options, [i, 1].concat(submods));
+					if(typeof options.modules[i] !== 'string') continue;
+					if(options.modules[i].charAt(0) === '{') continue; // the whole item will already be parsed as JSON
+					var submods = options.modules[i].split(/(?<!\\),/).map(m => m.trim());
+					if(submods.length > 1)
+					{
+						options.modules.splice.apply(options.modules, [i, 1].concat(submods));
+					}
 				}
 			}
-			options = {modules: options};
+			else
+			{
+				options.modules = [options.modules];
+			}
 		}
+		else
+		{
+			options.modules = ['forcedir', 'html'];
+		}
+		
 		const DIRNAME = (module.parent ? path.dirname(module.parent.filename) : '') || __dirname;
-		options = options || {};
 		options.webdir = options.webdir || path.resolve(DIRNAME, 'public_html');
-		options.modules = options.modules || ['forcedir', 'html'];
 		
 		const s = {
 			_modules: []
 		};
+		s._MOD_GROUP_ORDER = MOD_GROUP_ORDER;
 		s.mod = async function(moduleopts)
 		{
 			// Try parse as JSON
