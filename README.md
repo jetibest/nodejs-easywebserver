@@ -13,16 +13,16 @@ Make sure to checkout the source code for your concerns.
 
 # Installation
 ```bash
-cd /srv && git clone https://github.com/jetibest/nodejs-easywebserver.git
+cd /srv/mywebapp && git clone https://github.com/jetibest/nodejs-easywebserver.git
 ```
 
 # Run example from shell
 ```bash
-cd /srv/nodejs-easywebserver && node example/main.js
+cd /srv/mywebapp/nodejs-easywebserver && node example/main-simple.js
 ```
 
 # Example with systemd
-**`/root/nodejs-mywebapp.service`**:
+**`/srv/mywebapp/mywebapp.service`**:
 ```
 [Unit]
 Description=My example webapp
@@ -30,7 +30,7 @@ Description=My example webapp
 [Service]
 Type=simple
 WorkingDirectory=/srv/mywebapp
-ExecStart=/bin/bash -c 'cd /srv/mywebapp/ && node main.js'
+ExecStart=/bin/bash -c 'cd /srv/mywebapp/ && node main.js 8080'
 
 [Install]
 WantedBy=multi-user.target
@@ -38,10 +38,10 @@ WantedBy=multi-user.target
 
 **`/srv/mywebapp/main.js`**:
 ```js
-require('/srv/nodejs-easywebserver').create('forcedir,php,html', s => s.listen(8081));
+require('./nodejs-easywebserver').create('forcedir,php,html,404,log').then(s => s.listen(parseInt(process.argv[2]))).catch(console.error);
 ```
 
-**`/srv/mywebapp/public_html/index.phhp`**:
+**`/srv/mywebapp/public_html/index.php`**:
 ```php
 <?php
 echo "Hello World!";
@@ -49,8 +49,8 @@ echo "Hello World!";
 ```
 
 ```bash
-systemctl enable /root/nodejs-mywebapp.service
-systemctl start nodejs-mywebapp
+systemctl enable /srv/mywebapp/mywebapp.service
+systemctl start mywebapp
 ```
 
 # Mods
@@ -147,5 +147,26 @@ module.exports = function(options)
 };
 ```
  
+# Run serverside javascript servlet
 
+**`main.js`**:
+```js
+// Install and usage:
+//   git clone https://github.com/jetibest/nodejs-easywebserver && node main.js 8080
+
+require('./nodejs-easywebserver').create(['forcedir', {
+    name: 'custom-servlet',
+    group: 'catch-default',
+    middleware: function(req, res, next)
+    {
+        if(res.headersSent) return next();
+        
+        res.setHeader('Content-Type', 'text/html; charset=UTF-8');
+        
+        res.end('<!DOCTYPE html><html><body><h1>Hello world!</h1><p>The current time is: ' + new Date() + '.</p></body></html>');
+        
+        next();
+    }
+}, '404,log']).then(s => s.listen(parseInt(process.argv[2]))).catch(console.error);
+```
 
