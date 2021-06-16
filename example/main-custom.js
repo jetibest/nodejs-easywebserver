@@ -20,6 +20,7 @@ require('../../nodejs-easywebserver/').create({
 		{
 			if(res.headersSent) return next();
 			
+			res.setHeader('Content-Type', 'text/html; charset=UTF-8');
 			res.write('<!DOCTYPE html><html><body>');
 			res.write('<h1>NodeJS-EasyWebServer</h1>');
 			res.write('<h2>this</h2><pre>' + text_to_html(print_object(this)) + '</pre>');
