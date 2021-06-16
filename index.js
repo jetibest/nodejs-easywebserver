@@ -32,12 +32,12 @@ const self = module.exports = {
 		
 		if(!(typeof options === 'object' && !Array.isArray(options)))
 		{
-			options.modules = options;
+			options = {modules: options};
 		}
 		
 		if(typeof options.modules === 'string')
 		{
-			options.modules = options.modules.split(/(?<!\\),/).map(m => m.trim());
+			options.modules = options.modules.split(/(?<!\\),/g).map(m => m.trim());
 		}
 		else if(typeof options.modules === 'object')
 		{
@@ -47,7 +47,7 @@ const self = module.exports = {
 				{
 					if(typeof options.modules[i] !== 'string') continue;
 					if(options.modules[i].charAt(0) === '{') continue; // the whole item will already be parsed as JSON
-					var submods = options.modules[i].split(/(?<!\\),/).map(m => m.trim());
+					var submods = options.modules[i].split(/(?<!\\),/g).map(m => m.trim());
 					if(submods.length > 1)
 					{
 						options.modules.splice.apply(options.modules, [i, 1].concat(submods));
