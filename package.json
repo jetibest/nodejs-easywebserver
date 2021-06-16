@@ -1,0 +1,8 @@
+{
+	"name": "easywebserver",
+	"version": "1.0.0",
+	"dependencies": {
+		"express": "latest",
+		"php-fpm": "latest"
+	}
+}
