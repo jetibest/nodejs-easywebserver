@@ -505,6 +505,18 @@ const phpFpm = function(userOptions = {}, customParams = {})
 			SERVER_SOFTWARE: 'php-fpm for Node',
 			REDIRECT_STATUS: 200
 		};
+		
+		// pass through all request-headers of format 'Upper-Case' as 'HTTP_UPPER_CASE' (if not set yet)
+		for(const header in req.headers)
+		{
+			if(!Object.prototype.hasOwnProperty.call(req.headers, header)) continue;
+			
+			var key = 'HTTP_' + header.replace(/[-]/gi, '_').toUpperCase();
+			if(!(key in headers))
+			{
+				headers[key] = req.headers[header];
+			}
+		}
 
 		for (const header in headers)
 		{
