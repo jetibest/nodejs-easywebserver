@@ -268,7 +268,16 @@ const self = module.exports = {
 			// Final built-in module, that always ensures the response is ended
 			app.use(function(req, res, next)
 			{
-				if(res.headersSent) return next();
+				// catch response that didn't end yet
+				if(res.headersSent)
+				{
+					// automatically end response, that's not a strict requirement in middleware
+					if(!res.writableEnded)
+					{
+						res.end();
+					}
+					return next();
+				}
 				
 				console.error('error: At end of module chain, URL still not caught: ' + req.originalUrl);
 				res.set('Content-Type', 'text/plain; charset=UTF-8');
