@@ -414,7 +414,7 @@ module.exports = function(options)
 			if(result === null) return next();
 			
 			// turn output into flat array
-			var data = (Array.isArray(result) ? result : [result]).flat();
+			var data = (Array.isArray(result) ? result : [result]).flat(Infinity);
 			
 			// write data to response
 			for(var chunk of data)
