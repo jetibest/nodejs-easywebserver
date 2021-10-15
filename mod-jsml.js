@@ -1,5 +1,6 @@
 const path = require('path');
 const fs = require('fs');
+const express = require('express');
 
 function parse_imports(page_import)
 {
@@ -393,6 +394,7 @@ module.exports = function(options)
 {
 	const mod = this;
 	const webdir = path.resolve(options.webdir || this.webdir || path.resolve(options.__dirname || __dirname, 'public_html'));
+	const bodyparsers = options.bodyparsers || ['json', 'urlencoded'];
 	
 	this._path = options.path || '/';
 	this.middleware = async function(req, res, next)
@@ -400,10 +402,23 @@ module.exports = function(options)
 		if(res.headersSent) return next();
 		
 		// this root is passed on always as the root
-		const root = {jsml: jsml, path: webdir, module: mod};
+		const root = {jsml: jsml, path: webdir, module: mod, express: express};
 		
 		// this context will be the top-most parent of all contexts, each jsml-file has its own context (pageContext)
 		const context = {root: root};
+		
+		// parse body, so that req.body is an object of key/value parsed data (i.e. urlencoded or json or multipart etc)
+		if(bodyparsers)
+		{
+			for(var i=0;i<bodyparsers.length;++i)
+			{
+				var parser = bodyparsers[i];
+				var fn = typeof parser === 'function' ? parser : express[parser]();
+				
+				await new Promise(resolve => fn.call(context, req, res, resolve));
+			}
+		}
+		
 		
 		try
 		{

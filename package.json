@@ -3,6 +3,7 @@
 	"version": "1.0.0",
 	"dependencies": {
 		"express": "latest",
+		"fastcgi-client": "latest",
 		"php-fpm": "latest"
 	}
 }
