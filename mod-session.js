@@ -152,5 +152,12 @@ module.exports = function(options)
 		next();
 	};
 	
-	console.log('mod-session initialized, PUT HERE WHAT THIS MOD DOES');
+	var sessionStoragePath = options.storagePath || './sessions'; // local storage path, where to put the sessions on the server
+	var sessionName = options.name || 'session_id';
+	var sessionTimeoutMS = options.timeoutMS || (Date.now() + 100 * 365 * 3600 * 1000); // defaults to one century from now, logging out should be done using request.session.removeItem('login') or something
+	var sessionMatch = options.match || null; // only create session when matching a given url path
+	var sessionSecure = 'secure' in options ? !!options.secure : true; // only over HTTPS, not plain HTTP, enabled by default (for security reasons)
+	var sessionHttpOnly = 'httpOnly' in options ? !!options.httpOnly : true; // only serverside may access (not javascript on clientside), enabled by default (for security reasons)
+	
+	console.log('mod-session initialized, creates cookie, and provides request.session object with API similar to LocalStorage. Session storagePath=' + sessionStoragePath + ', name=' + sessionName + ', timeoutMS=' + sessionTimeoutMS + ', match=' + sessionMatch + ', secure=' + sessionSecure + ', httpOnly=' + sessionHttpOnly);
 };
