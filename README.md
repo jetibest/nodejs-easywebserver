@@ -13,7 +13,10 @@ Make sure to checkout the source code for your concerns.
 
 # Installation
 ```bash
-cd /srv/mywebapp && git clone https://github.com/jetibest/nodejs-easywebserver.git
+cd /srv/mywebapp
+git clone https://github.com/jetibest/nodejs-easywebserver.git
+cd nodejs-easywebserver
+npm install
 ```
 
 # Run example from shell
@@ -38,13 +41,17 @@ WantedBy=multi-user.target
 
 **`/srv/mywebapp/main.js`**:
 ```js
-require('./nodejs-easywebserver').create('forcedir,php,html,404,log').then(s => s.listen(parseInt(process.argv[2]))).catch(console.error);
+require('./nodejs-easywebserver').create('session,hide,forcedir,jsml,html,404,log').then(s => s.listen(parseInt(process.argv[2]))).catch(console.error);
 ```
 
-**`/srv/mywebapp/public_html/index.php`**:
+**`/srv/mywebapp/public_html/index.jsml`**:
 ```php
-<?php
-echo "Hello World!";
+<%@ contentType "text/html; charset=UTF-8"%><!DOCTYPE html>
+<html>
+<body>
+  <%="Hello World!"%>
+</body>
+</html>
 ?>
 ```
 
@@ -82,6 +89,20 @@ Options:
  - **`match`**: Regular expression or function, only for matching the URL (=`/pathname?querystring#hash`), has no default. It is the first argument of the `String.replace()` function in Javascript. Mod will fail to initialize if match is not set.
  - **`path`**: String or function with the replacement (not necessarily restricted to the pathname as the querystring and hash are also included in matching), defaults to an empty string (meaning the matched part will be removed). It is the second argument of `String.replace()` function in Javascript.
 
+## [pre-route] mod-session
+Create a session using a cookie at client-side.
+Cookies are stored as plain/text files in a session-directory.
+Cookie files are not deleted (even if they are expired), a daily script can easily be made to do this using: `find path/to/sessions/ -mtime +90 -delete`.
+Deleting a cookie on the server will logically "expire" the cookie as well.
+
+Options:
+ - **`storagePath`**: Directory to put session files in. The service must have read/write permissions in this directory. Defaults to `./sessions`.
+ - **`name`**: Name of the session. Defaults to `session_id`.
+ - **`timeoutMS`**: Defaults to infinity, actually 100 years from now. Instead of setting expire, this can also be controlled server-side by deleting the cookie-files based on their last-modified date.
+ - **`match`**: Regular expression that must match the request path. Defaults to null, meaning a cookie is set for any path.
+ - **`secure`**: Boolean value to indicate whether or not cookie is secure. Secure cookies are only sent over HTTPS for security. Defaults to true.
+ - **`httpOnly`**: Boolean value to indicate whether client-side scripts are prevented to read/write the cookie. Defaults to true, for security.
+
 ## [pre-process] -- no mods yet --
 
 ## [catch-extension] mod-php
@@ -93,6 +114,36 @@ Options:
  - **`host`**: Hostname at which the `php-fpm` daemon should be listening, defaults to `127.0.0.1`.
  - **`port`**: Port at which the `php-fpm` daemon should be listening, defaults to automatically grabbing any available port in the dynamic port range.
  - **`phpPath`**: Custom path for the `.php/` config/log directory, defaults to `.php` (relative to the working directory, may also be an absolute path).
+
+## [catch-extension] mod-jsml
+Enable interpretation of JSML-files (`.jsml`).
+This mod will compile a file in-place to a javascript module (`file.jsml` to `.file.jsml.js`).
+For security reasons, server-side must never be made public, therefore any file ending with .jsml.js will be caught and thus hidden (`HTTP 403 Forbidden`).
+
+Options:
+ - **`bodyparsers`**: An array with names of bodyparsers in Express, or a function with manual processing. Defaults to `['json', 'urlencoded']`.
+ - **`webdir`**: The base-directory of the website. Defaults to `public_html`, or the globally defined web-directory.
+
+Usage:
+ - `<% /* ...js-code... */ %>` is used to insert server-side javascript code, running in NodeJS. By default, JSML is only written if response.headersSent is falsy. Furthermore note that the code is within an async function-wrapper, meaning `await` can be used directly. All data chunks written using `out.print` is put in the `out.data` array, and not directly to the response-stream, to allow for request forwarding halfway in the document and similar features. List of globals:
+     - `request`
+     - `response`
+     - `out.print([string]);`
+     - `out.println([string]);`
+     - `out.encodeHTML([string]);`
+     - `out.throw([Error]);`
+     - `context.__jsml_file`
+     - `context.parent`
+     - `context.root`
+ - `<%@include /* ...js-expression... */ %>` is used to dynamically include another JSML-file.
+ - `<%@forward /* ...js-expression... */ %>` is used to internally forward to another URL (re-evaluating the middleware pipeline from the start with a different URL). Normally must be followed by `<% return; %>`, since the response is likely to have ended.
+ - `<%@page key value %>` is used to set a page property, multiple keys may be used, either with or without equals-sign. Page is the default for this tag-type, so `<%@ key value %>`. Supported keys:
+     - contentType (String)
+     - statusCode (Integer)
+     - status (alias of statusCode)
+ - `<%! /* ...js-code... */ %>` is used to run static code at the time the file is required.
+ - `<%= /* ...js-code... */ %>` is is a wrapper for `out.print(out.encodeHTML( /* ...js-code... */ ));`.
+ - `<%-- ...commented out... --%>` is a comment, any data inside is ignored.
 
 ## [catch-default] -- no mods yet --
 
