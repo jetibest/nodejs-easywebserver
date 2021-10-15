@@ -246,20 +246,29 @@ const self = module.exports = {
 					return (a.priority || 0) - (b.priority || 0);
 				}
 				return MOD_GROUP_ORDER[a.group] - MOD_GROUP_ORDER[b.group];
-			});	
+			});
+            
+            var upgradehandlers = [];
 			
 			s._modules.forEach(function(m)
 			{
 				if(m && !m._disabled)
 				{
-					if(m._path)
-					{
-						app.use(m._path, modmw(m));
-					}
-					else
-					{
-						app.use(modmw(m));
-					}
+                    if(typeof m.middleware === 'function')
+                    {
+                        if(m._path)
+                        {
+                            app.use(m._path, modmw(m));
+                        }
+                        else
+                        {
+                            app.use(modmw(m));
+                        }
+                    }
+                    if(typeof m.onupgrade === 'function')
+                    {
+                        upgradehandlers.push(m);
+                    }
 				}
 			});
 			
@@ -287,6 +296,23 @@ const self = module.exports = {
 			
 			s._server = express({strict: true}).use(app).listen(port || 8080);
 			
+            s._server.on('upgrade', async function(req, socket, head)
+            {
+                // execute modules in order, even if modules are async and need time to complete
+                // because there is no next function
+                for(var i=0;i<upgradehandlers.length;++i)
+                {
+                    var m = upgradehandlers[i];
+                    var err = null;
+                    var res = await m.onupgrade.call(m, req, socket, head).catch(_err => err = _err);
+                    if(err !== null)
+                    {
+                        console.log('module ' + m.name + ' threw an exception on upgrade:');
+                        console.log(err);
+                    }
+                }
+            });
+            
 			return s;
 		};
 		
