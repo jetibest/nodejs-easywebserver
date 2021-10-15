@@ -696,7 +696,7 @@ module.exports = async function(options)
 	});
 	app.use(async function(req, res, next)
 	{
-		if(res.headersSent) return next();
+		if(res.headersSent || res.statusCode !== 200) return next();
 		
 		if(/^[^?]*\.php($|[?])/gi.test(req.url))
 		{
@@ -710,7 +710,7 @@ module.exports = async function(options)
 	});
 	app.use('/', async function(req, res, next)
 	{
-		if(res.headersSent) return next();
+		if(res.headersSent || res.statusCode !== 200) return next();
 		
 		fs.access(path.resolve(webdir, mod._options._easywebserver.getPath(req).substring(1) + 'index.php'), fs.constants.R_OK, async function(err)
 		{

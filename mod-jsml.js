@@ -87,6 +87,23 @@ async function handle_jsml_file(context, request, response, input_file, root_pat
 		}
 	}
 	
+	// check if file has .jsml.js extension, ensure it cannot be delivered
+	if(jsml_file.endsWith('.jsml.js'))
+	{
+		if(!response.headersSent)
+		{
+			response.status(403);
+		}
+		return null;
+	}
+	
+	// check if file has .jsml extension
+	if(!jsml_file.endsWith('.jsml'))
+	{
+		// not a JSML-file, cannot be parsed
+		return null;
+	}
+	
     // add .js extension for it being a javascript file, and prefix with . to make it hidden (and also must be inaccessible by the public webserver -> serverside code must not be seen from the outside)
     var js_file = jsml_file.replace(/[^\/]*$/, filename => '.' + filename + '.js');
 	
@@ -376,7 +393,7 @@ const jsml = {
             '    await (async () =>', // wrap so that we may use 'return;', and still return the written data so far
             '    {',
             (!response_lines.length ? '' : [
-            '      if(!response.headersSent)',
+            '      if(!response.headersSent && response.statusCode === 200)',
             '      {',
             '        ' + response_lines.join('\n        '),
             '      }',
@@ -399,7 +416,7 @@ module.exports = function(options)
 	this._path = options.path || '/';
 	this.middleware = async function(req, res, next)
 	{
-		if(res.headersSent) return next();
+		if(res.headersSent || res.statusCode !== 200) return next();
 		
 		// this root is passed on always as the root
 		const root = {jsml: jsml, path: webdir, module: mod, express: express};
@@ -443,7 +460,7 @@ module.exports = function(options)
 		{
 			console.error(err);
 			
-			if(!res.headersSent)
+			if(!res.headersSent && res.statusCode === 200)
 			{
 				// show custom error page, maybe this err must be passed on in req.locals
 				res.status(500);
