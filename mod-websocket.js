@@ -110,7 +110,29 @@ module.exports = function(options)
         {
             fn.push(function(websocket)
             {
-                return require(jsws_file).onwebsocket(websocket, req);
+		// support:
+		//  - module.exports = function(websocket, request){}; (recommended approach)
+		//  - module.exports = {onconnection: function(websocket, request){}};
+		//  - module.exports = new events().on('connection', function(websocket, request){});
+		
+		var jsws_handler = require(jsws_file);
+		
+		if(typeof jsws_handler === 'function')
+		{
+			return jsws_handler.call(mod, websocket, req);
+		}
+		else if(jsws_handler && typeof jsws_handler.onconnection === 'function')
+		{
+			return jsws_handler.onconnection(websocket, req);
+		}
+		else if(jsws_handler && typeof jsws_handler.emit === 'function')
+		{
+			return jsws_handler.emit('connection', websocket, req);
+		}
+		else
+		{
+			throw new Error('Invalid jsws-module (' + jsws_file + ').');
+		}
             });
         }
         
