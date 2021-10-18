@@ -67,7 +67,7 @@ module.exports = function(options)
 		
 		// what if we receive a cookie in req.cookies, but the file doesn't exist?
 		
-		if(!session_stat && !res.headersSent) // cannot create session if headers sent already, this might be due to some url redirection from another module etc.
+		if(!session_stat && res && !res.headersSent) // cannot create session if headers sent already, this might be due to some url redirection from another module etc.
 		{
 			// same number as MAC-addr, the time is included to guarantee uniqueness
 			var random_bytes = await new Promise((resolve, reject) => crypto.randomBytes(6, function(err, buf)

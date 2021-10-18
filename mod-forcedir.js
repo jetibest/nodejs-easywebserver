@@ -34,7 +34,7 @@ module.exports = function(options)
 			req.url = mod._options._easywebserver.replaceURLPath(p => p.replace(/\/$/g, '') + '/', req);
 		}
 		
-		res.redirect(302, req.url);
+		if(res) res.redirect(302, req.url);
 		next();
 	};
 	

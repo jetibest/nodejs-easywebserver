@@ -14,7 +14,7 @@ module.exports = function(options)
 		if(match.test(req.url))
 		{
 			console.log('mod-hide: sent 403 for url: ' + req.url);
-			return res.status(403).end();
+			if(res) res.status(403);
 		}
 		next();
 	};
