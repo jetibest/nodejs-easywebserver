@@ -77,10 +77,11 @@ Options:
  - **`header`**: Customize the name of the header in which the proxy passes the original pathname (which is allowed to be the complete URL), defaults to `x-forwarded-original-path`.
 
 ## [pre-route] mod-hide
-Block access to a directories or files based on a regular expression. Note that it does show that the file is actively forbidden, and the existence of the file is therefore not hidden - since if this were needed, the files or directory should probably not be there in the first place.
+Hide access to a directories or files based on a regular expression.
 
 Options:
- - **`match`**: Regular expression, if matches the URL (=`/pathname?querystring#hash`), blocks access. Defaults to `/^[^#?]*(^|\/)[.$_]/gi` which matches all files starting with `.`, `$`, or `_`.
+ - **`match`**: Comma-separated pathname entries (case-insensitive), with basic wildcard matching (use `*` for any number of characters, and `?` for exactly one character). If matches part of the path (=`/any/of/these/components`), it hides access. Defaults to `/^[^#?]*(^|\/)[.$_]/gi` (which matches all files starting with `.`, `$`, or `_`) and `node_modules`.
+ - **`status`**: Set a custom status code, such as 403 (Forbidden). Defaults to 404 (Not Found).
  
 ## [pre-route] mod-urlrewrite
 Generic regular expression-based URL rewriting for internal routing only (no redirects, meaning the rewriting is not visible for clients i.e. in the address bar).
