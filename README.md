@@ -139,9 +139,10 @@ Usage:
  - `<%@include /* ...js-expression... */ %>` is used to dynamically include another JSML-file.
  - `<%@forward /* ...js-expression... */ %>` is used to internally forward to another URL (re-evaluating the middleware pipeline from the start with a different URL). Normally must be followed by `<% return; %>`, since the response is likely to have ended.
  - `<%@page key value %>` is used to set a page property, multiple keys may be used, either with or without equals-sign. Page is the default for this tag-type, so `<%@ key value %>`. Supported keys:
-     - contentType (String)
-     - statusCode (Integer)
-     - status (alias of statusCode)
+     - contentType <HTTP Content-Type header:String>
+     - statusCode <HTTP Status code:Number>
+     - status <statusCode:Number>
+     - import <require module:String>
  - `<%! /* ...js-code... */ %>` is used to run static code at the time the file is required.
  - `<%= /* ...js-code... */ %>` is is a wrapper for `out.print(out.encodeHTML( /* ...js-code... */ ));`.
  - `<%-- ...commented out... --%>` is a comment, any data inside is ignored.

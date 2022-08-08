@@ -4,38 +4,23 @@ const express = require('express');
 
 function parse_imports(page_import)
 {
-    var import_parents = []; // for nested import definition (const parent... = {})
     var imports = [];
 
     for(var i=0;i<page_import.length;++i)
     {
         var lib = page_import[i];
-        var lib_name = lib.replace(/-/g, '_').replace(/[^a-z0-9\/_]+/gi, '').replace(/^[\/]|[\/]$/g, '');
-
-        var names = lib_name.split('/');
-        if(names.length === 1)
-        {
-            imports.push('const ' + lib_name + ' = require(' + JSON.stringify(lib) + ');');
-        }
-        else
-        {
-            import_parents.push('const ' + names[0] + ' = {};');
-            for(var j=2;j<names.length;++j)
-            {
-                import_parents.push(names[0] + '[\'' + names.slice(1, j).join('\'][\'') + '\'] = {};');
-            }
-            imports.push(names.join('.') + ' = require(' + JSON.stringify(lib) + ');');
-        }
+        var lib_name = path.normalize(lib)
+			.replace(/[.][.][\/]/g, '__') // ../ --> __
+			.replace(/[-\/]/g, '_') // - or / --> _
+			.replace(/[^a-z0-9_]+/gi, ''); // any non alphanumeric or lowercase letter is removed
+		
+		imports.push('const ' + lib_name + ' = require(' + JSON.stringify(lib) + ');');
     }
 
     // make imports unique:
-    import_parents = [...new Set(import_parents)];
     imports = [...new Set(imports)];
 
-    // sort by number of dots (more dots, later)
-    imports.sort((a, b) => a.replace(/[^.]/g, '').length - b.replace(/[^.]/g, '').length);
-
-    return import_parents.concat(imports);
+    return imports;
 }
 async function resolves(fn)
 {
@@ -137,14 +122,11 @@ async function handle_jsml_file(context, request, response, input_file, root_pat
         return null;
     }
     
-    // if jail_path is given, the real path of input_file must be a prefix of the real path of jail_path
-    if(jail_path)
+    // check if file has .jsml extension
+    if(!jsml_file.endsWith('.jsml'))
     {
-        var real_jail_path = await fs.promises.realpath(jail_path).catch(throw_error(jsml_file));
-        if(!jsml_file.startsWith(real_jail_path))
-        {
-            throw new Error('Jailbreak: JSML-file (' + jsml_file + ') is not within its given jail path (' + real_jail_path + ').');
-        }
+        // not a JSML-file, cannot be parsed
+        return null;
     }
     
     // check if file has .jsml.js extension, ensure it cannot be delivered
@@ -157,11 +139,14 @@ async function handle_jsml_file(context, request, response, input_file, root_pat
         return null;
     }
     
-    // check if file has .jsml extension
-    if(!jsml_file.endsWith('.jsml'))
+    // if jail_path is given, the real path of input_file must be a prefix of the real path of jail_path
+    if(jail_path)
     {
-        // not a JSML-file, cannot be parsed
-        return null;
+        var real_jail_path = await fs.promises.realpath(jail_path).catch(throw_error(jsml_file));
+        if(!jsml_file.startsWith(real_jail_path))
+        {
+            throw new Error('Jailbreak: JSML-file (' + jsml_file + ') is not within its given jail path (' + real_jail_path + ').');
+        }
     }
     
     // add .js extension for it being a javascript file, and prefix with . to make it hidden (and also must be inaccessible by the public webserver -> serverside code must not be seen from the outside)
