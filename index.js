@@ -1,6 +1,7 @@
 const fs = require('fs');
-const express = require('express');
+const http = require('http');
 const path = require('path');
+const router = require('router');
 
 const MOD_GROUP_ORDER = {
 	'pre-route': 100,		// redirects (path fixing)
@@ -230,8 +231,81 @@ const self = module.exports = {
 		};
 		s.listen = function(port)
 		{
-			const app = s._app = express.Router({strict: true});
+			const app = s._app = router({strict: true});
 			
+			// pre-baked functionality middleware (modules that are turned on by default), to enhance the default router/httpServer functionality
+			app.use(function(req, res, next)
+			{
+				// map for local request attributes
+				req.locals = req.locals || {};
+
+				// parse query from req.url into object (multiple keys of the same name will be turned into an array)
+				req.query = {};
+				var offset = req.url.lastIndexOf('?');
+				if(offset >= 0)
+				{
+					var params = req.url.substring(offset + 1).split('&');
+					for(var i=0;i<params.length;++i)
+					{
+						var param = params[i];
+						var eq = param.indexOf('=');
+						var key = eq;
+						var value = true;
+						if(eq >= 0)
+						{
+							key = decodeURIComponent(param.substring(0, eq));
+							value = decodeURIComponent(param.substring(eq + 1));
+						}
+						
+						if(key in req.query)
+						{
+							var arrval = req.query[key];
+							if(Array.isArray(arrval))
+							{
+								arrval.push(value);
+							}
+							else
+							{
+								req.query[key] = [arrval, value];
+							}
+						}
+						else
+						{
+							req.query[key] = value;
+						}
+					}
+				}
+				
+				// set path as req.url without querystring
+				req.path = offset >= 0 ? req.url.substring(0, offset) : req.url;
+
+				// optionally we may also use x-forwarded-for, but only if we trust that header value, so we need the proxy-addr module for that
+				req.secure = req.connection.encrypted ? true : false;
+				req.protocol = req.secure ? 'https' : 'http';
+				
+				// optionally we may also use x-forwarded-host, but only if we trust that header value, so we need the proxy-addr module for that
+				var hostname = req.headers.host;
+				// hostname = hostname.replace(/,.*$/g, '').trimRight(); --> only in case of x-forwarded-host
+				if(hostname)
+				{
+					var offset = hostname[0] === '[' ? hostname.indexOf(']') + 1 : 0;
+					var index = hostname.indexOf(':', offset);
+					
+					req.hostname = index !== -1 ? hostname.substring(0, index) : hostname;
+				}
+
+				// additional convenience function for headers, for backwards compatibility with express:
+				req.get = req.header = function header(name)
+				{
+					name = name.toLowerCase();
+					console.error('deprecation warning: Please do not use the request.get/request.header function, just directly access request.headers[' + name + ']');
+					if(name === 'referer' || name === 'referrer') return this.headers.referer || this.headers.referrer;
+					return this.headers[name];
+				};
+				
+				next();
+			});
+
 			// use modmw to set the 'this' keyword as the module instance
 			const modmw = function(m)
 			{
@@ -306,7 +380,12 @@ const self = module.exports = {
 				next();
 			});
 			
-			s._server = express({strict: true}).use(app).listen(port || 8080);
+
+			s._server = http.createServer();
+			s._router = router({strict: true});
+			s._router.use(app);
+			s._server.on('request', (req, res) => s._router(req, res, () => {}));
+			s._server.listen(port || 8080);
 			
 			s._server.on('upgrade', async function(req, socket, head)
 			{

@@ -1,6 +1,6 @@
 const path = require('path');
 const fs = require('fs');
-const express = require('express');
+const bodyparser = require('body-parser');
 
 function parse_imports(page_import)
 {
@@ -475,7 +475,7 @@ module.exports = function(options)
             for(var i=0;i<bodyparsers.length;++i)
             {
                 var parser = bodyparsers[i];
-                var fn = typeof parser === 'function' ? parser : express[parser]();
+                var fn = typeof parser === 'function' ? parser : bodyparser[parser]();
                 
                 await new Promise(resolve => fn.call(context, req, res, resolve));
             }

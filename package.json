@@ -1,10 +1,12 @@
 {
 	"name": "easywebserver",
-	"version": "1.0.0",
+	"version": "1.0.1",
 	"dependencies": {
-		"express": "latest",
+		"body-parser": "latest",
 		"fastcgi-client": "latest",
 		"php-fpm": "latest",
+		"router": "latest",
+		"send": "latest",
 		"ws": "latest"
 	}
 }
