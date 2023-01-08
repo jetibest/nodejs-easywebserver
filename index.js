@@ -3,13 +3,13 @@ const express = require('express');
 const path = require('path');
 
 const MOD_GROUP_ORDER = {
-	'pre-route': 100,        // redirects (path fixing)
-	'pre-process': 200,      // process request (headers, fileupload)
+	'pre-route': 100,		// redirects (path fixing)
+	'pre-process': 200,	  // process request (headers, fileupload)
 	'catch-extension': 300,  // catch a specific extension (php, jsml)
-	'catch-default': 400,    // default module catch
-	'catch-all': 500,        // catch any resource (provide static resources)
-	'error': 600,            // handle errors for whatever was not caught
-	'post-process': 700      // process response after it has already been sent (i.e. logging, or async request processing)
+	'catch-default': 400,	// default module catch
+	'catch-all': 500,		// catch any resource (provide static resources)
+	'error': 600,			// handle errors for whatever was not caught
+	'post-process': 700	  // process response after it has already been sent (i.e. logging, or async request processing)
 };
 
 const self = module.exports = {
@@ -61,7 +61,7 @@ const self = module.exports = {
 		}
 		else
 		{
-			options.modules = ['forcedir', 'html'];
+			options.modules = ['forcedir', 'listdir', 'html'];
 		}
 		
 		const DIRNAME = (module.parent ? path.dirname(module.parent.filename) : '') || __dirname;
@@ -85,7 +85,7 @@ const self = module.exports = {
 				}
 				catch(err) {}
 			}
-			// Try to check for embedded name options combination (NAME:K=V:K=V:K=V)
+			// Try to check for embedded name options combination (NAME:K=V:K=V:K=V:FLAG:!FLAG)
 			if(typeof moduleopts === 'string')
 			{
 				// dashes are allowed in keys, which transforms some-property into someProperty
@@ -106,7 +106,9 @@ const self = module.exports = {
 						}
 						else
 						{
-							moduleopts.options[part.replace(/-[a-z]/gi, $0 => $0.charAt(1).toUpperCase())] = true;
+							// boolean flag is given, because no value was set
+							// set to true by default, or false if leading exclamation mark exists
+							moduleopts.options[part.replace(/^[!]/gi, '').replace(/-[a-z]/gi, $0 => $0.charAt(1).toUpperCase())] = !part.startsWith('!');
 						}
 					}
 				}
@@ -188,7 +190,7 @@ const self = module.exports = {
 		};
 		s.reroute = (function()
 		{
-			const REROUTE_RECURSION_LIMIT = s._REROUTE_RECURSION_LIMIT || 100;
+			const REROUTE_RECURSION_LIMIT = s._REROUTE_RECURSION_LIMIT || 10;
 			const getFirstHandle = function(r)
 			{
 				if(r.handle) return r.handle;
@@ -204,7 +206,7 @@ const self = module.exports = {
 			return function(path, req, res, next)
 			{
 				// detect recursion (limit recursion at 100)
-				if(req.reroute === path && req.rerouteCount < REROUTE_RECURSION_LIMIT)
+				if(req.reroute === path && req.rerouteCount >= REROUTE_RECURSION_LIMIT)
 				{
 					console.error('easywebserver.reroute: Reroute recursion detected for path: ' + path + ' (' + (req.rerouteCount || 1) + 'x)');
 					return res.status(500).end();
@@ -233,9 +235,18 @@ const self = module.exports = {
 			// use modmw to set the 'this' keyword as the module instance
 			const modmw = function(m)
 			{
-				return function(req, res, next)
+				return async function(req, res, next)
 				{
-					m.middleware.apply(m, arguments);
+					try
+					{
+						await m.middleware.apply(m, arguments);
+					}
+					catch(err)
+					{
+						console.error('[' + m.name + ']: Unhandled error in middleware():', err);
+						if(res.statusCode === 200) res.statusCode = 500;
+						next();
+					}
 				};
 			};
 			
@@ -247,28 +258,28 @@ const self = module.exports = {
 				}
 				return MOD_GROUP_ORDER[a.group] - MOD_GROUP_ORDER[b.group];
 			});
-            
-            var upgradehandlers = [];
+			
+			var upgradehandlers = [];
 			
 			s._modules.forEach(function(m)
 			{
 				if(m && !m._disabled)
 				{
-                    if(typeof m.middleware === 'function')
-                    {
-                        if(m._path)
-                        {
-                            app.use(m._path, modmw(m));
-                        }
-                        else
-                        {
-                            app.use(modmw(m));
-                        }
-                    }
-                    if(typeof m.onupgrade === 'function')
-                    {
-                        upgradehandlers.push(m);
-                    }
+					if(typeof m.middleware === 'function')
+					{
+						if(m.mountPath || m._path) // _path for backwards compatibility, replaced by mountPath
+						{
+							app.use(m.mountPath || m._path, modmw(m));
+						}
+						else
+						{
+							app.use(modmw(m));
+						}
+					}
+					if(typeof m.onupgrade === 'function')
+					{
+						upgradehandlers.push(m);
+					}
 				}
 			});
 			
@@ -289,6 +300,7 @@ const self = module.exports = {
 				}
 				
 				console.error('error: At end of module chain, URL still not caught: ' + req.originalUrl);
+				res.statusCode = res.statusCode === 200 ? 404 : res.statusCode;
 				res.set('Content-Type', 'text/plain; charset=UTF-8');
 				res.end('Error: URL not caught: ' + req.originalUrl);
 				next();
@@ -296,23 +308,23 @@ const self = module.exports = {
 			
 			s._server = express({strict: true}).use(app).listen(port || 8080);
 			
-            s._server.on('upgrade', async function(req, socket, head)
-            {
-                // execute modules in order, even if modules are async and need time to complete
-                // because there is no next function
-                for(var i=0;i<upgradehandlers.length;++i)
-                {
-                    var m = upgradehandlers[i];
-                    var err = null;
-                    var res = await m.onupgrade.call(m, req, socket, head).catch(_err => err = _err);
-                    if(err !== null)
-                    {
-                        console.log('module ' + m.name + ' threw an exception on upgrade:');
-                        console.log(err);
-                    }
-                }
-            });
-            
+			s._server.on('upgrade', async function(req, socket, head)
+			{
+				// execute modules in order, even if modules are async and need time to complete
+				// because there is no next function
+				for(var i=0;i<upgradehandlers.length;++i)
+				{
+					var m = upgradehandlers[i];
+					var err = null;
+					var res = await m.onupgrade.call(m, req, socket, head).catch(_err => err = _err);
+					if(err !== null)
+					{
+						console.log('module ' + m.name + ' threw an exception on upgrade:');
+						console.log(err);
+					}
+				}
+			});
+			
 			return s;
 		};
 		

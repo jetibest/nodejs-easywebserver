@@ -149,12 +149,26 @@ Usage:
 
 ## [catch-default] -- no mods yet --
 
-## [catch-all] mod-html
-Enable delivery of static files such as `.html`, `.css`, `.js`, `.jpg`, etc. in the `public_html` directory.
+## [catch-all] mod-list
+Enable simple directory listing, providing a simple HTML index page.
 
 Options:
- - **`webdir`**: Path to the directory that contains the web-files, defaults to `public_html` (relative to the working directory, may also be an absolute path).
  - **`path`**: Pathname on which to mount the webdir in URL, defaults to `/` (`example.com/` will by default refer to `public_html`).
+ - **`webdir`**: Path to the directory that should be listed, defaults to `public_html` (relative to the working directory, or may also be an absolute path).
+ - **`maxDepth`**: Set a number to control maximum folder depth (before any symlinks are resolved, or paths are normalized). For instance, set to 1, to only allow the given directory to be listed, but no subfolders. Depth defaults to 0 (indicating Infinity).
+ - **`hide`**: Hide files (or directories) matching the given comma-delimited basic wildcard patterns (use `*` for any number of characters, and `?` for exactly one character). Defaults to `.*`, hiding all files starting with a dot. Set to false or empty string, to prevent any files being hidden (i.e. `mod-list:!hide`).
+ - **`columns`**: List of columns to show. Leaving out size and lastModified may significantly improve performance. Defaults to `name,lastModified,size`.
+ - **`robots`**: Prevent crawlers/robots indexing or following the listing by setting to `noindex,nofollow`. Defaults to empty string, enabling robots to index/follow.
+
+Note: if index.htm or index.html exists in the directory, and mod-html is included *before* mod-list, then the response will be provided by mod-html.
+
+## [catch-all] mod-html
+Enable delivery of static files such as `.html`, `.css`, `.js`, `.jpg`, etc. in the `public_html` directory.
+Also automatically presents index.htm or index.html if exists, for directories.
+
+Options:
+ - **`path`**: Pathname on which to mount the webdir in URL, defaults to `/` (`example.com/` will by default refer to `public_html`).
+ - **`webdir`**: Path to the directory that contains the web-files, defaults to `public_html` (relative to the working directory, or may also be an absolute path).
 
 ## [error] mod-reroute
 Reroute the request to a different path, given a match is found. This is an internal redirect, sending the Request and Response object back to square one (to the first middleware handler of the app). This is the final handler, that will try to deal with errors from previous mods, and typically gives a 404 Not Found message.
