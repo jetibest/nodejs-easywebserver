@@ -375,8 +375,9 @@ const self = module.exports = {
 				
 				console.error('error: At end of module chain, URL still not caught: ' + req.originalUrl);
 				res.statusCode = res.statusCode === 200 ? 404 : res.statusCode;
-				res.set('Content-Type', 'text/plain; charset=UTF-8');
-				res.end('Error: URL not caught: ' + req.originalUrl);
+				res.setHeader('Content-Type', 'text/plain; charset=UTF-8');
+				res.writeHead(res.statusCode);
+				res.end('Error: URL not caught: ' + req.originalUrl + '\n');
 				next();
 			});
 			
