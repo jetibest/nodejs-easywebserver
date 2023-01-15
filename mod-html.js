@@ -17,6 +17,7 @@ module.exports = function(options)
 		
 		var target_dir = path.normalize(req.url.replace(/[?#].*$/g, ''));
 
+		var jail_path = webdir;
 		if(followSymlinks !== 'unsafe')
 		{
 			try
@@ -32,7 +33,8 @@ module.exports = function(options)
 				// check jailbreak for the real target path (but only if followSymlinks is set to unsafe)
 				if(!real_target_dir.startsWith(real_webdir)) return next();
 
-				target_dir = path.relative(real_webdir, real_target_dir);
+				target_dir = '/' + path.relative(real_webdir, real_target_dir);
+				jail_path = real_webdir;
 			}
 			catch(err)
 			{
@@ -50,7 +52,12 @@ module.exports = function(options)
 			next();
 			next = null;
 		};
-		var s = send(req, target_dir, {root: webdir});
+		var s = send(req, target_dir, {root: jail_path});
+		s.on('directory', function()
+		{
+			// careful: by default send does a 301 Moved Permanently redirect when a directory is passed!
+			nextwrap();
+		});
 		s.on('error', function(err)
 		{
 			if(err.code === 'ENOENT')
