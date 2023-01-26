@@ -15,7 +15,34 @@ module.exports = function(options)
 	
 		if(req.method !== 'GET' && req.method !== 'HEAD') return next();
 		
-		var target_dir = path.normalize(req.url.replace(/[?#].*$/g, ''));
+		var url_path = req.url.replace(/[?#].*$/g, '');
+		var target_dir = path.normalize(url_path);
+		
+		if(url_path.endsWith('/'))
+		{
+			try
+			{
+				var target_stat = await fs.promises.stat(path.join(webdir, target_dir));
+				
+				if(target_stat.isDirectory())
+				{
+					// try to find index.html if directory
+					target_dir = target_dir.replace(/[/]/g, '') + '/index.html';
+				}
+			}
+			catch(err)
+			{
+				if(err.code === 'ENOENT')
+				{
+					// in absence of directory, try to match name with .html
+					target_dir = target_dir.replace(/[/]$/g, '') + '.html';
+				}
+				else
+				{
+					return next();
+				}
+			}
+		}
 
 		var jail_path = webdir;
 		if(followSymlinks !== 'unsafe')
@@ -26,10 +53,10 @@ module.exports = function(options)
 				
 				var real_target_dir = await fs.promises.realpath(target_dir);
 				var real_webdir = await fs.promises.realpath(webdir);
-		
+
 				// if nofollow, but target points somewhere else, then skip, but only from webdir, because webdir itself is allowed to be a symlink
 				if(!followSymlinks && path.relative(real_webdir, real_target_dir) !== path.relative(webdir, target_dir)) return next();
-	
+				
 				// check jailbreak for the real target path (but only if followSymlinks is set to unsafe)
 				if(!real_target_dir.startsWith(real_webdir)) return next();
 
@@ -38,6 +65,7 @@ module.exports = function(options)
 			}
 			catch(err)
 			{
+				console.error(err);
 				if(err.code !== 'ENOENT')
 				{
 					console.error('mod-html:', err);
@@ -52,6 +80,7 @@ module.exports = function(options)
 			next();
 			next = null;
 		};
+
 		var s = send(req, target_dir, {root: jail_path});
 		s.on('directory', function()
 		{
