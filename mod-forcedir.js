@@ -5,6 +5,8 @@ module.exports = function(options)
 	this.group = 'pre-route',
 	this.middleware = function(req, res, next)
 	{
+		if(res.headersSent || res.statusCode !== 200) return next();
+
 		var originalPath = req.headers[header];
 		var isExternal = false;
 		if(typeof originalPath !== 'string')
@@ -34,7 +36,8 @@ module.exports = function(options)
 			req.url = mod._options._easywebserver.replaceURLPath(p => p.replace(/\/$/g, '') + '/', req);
 		}
 		
-		if(res) res.redirect(302, req.url);
+		res.statusCode = 302;
+		res.setHeader('Location', req.url);
 		next();
 	};
 	

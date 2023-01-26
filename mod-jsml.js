@@ -464,7 +464,7 @@ module.exports = function(options)
         if(res.headersSent || res.statusCode !== 200) return next();
         
         // this root is passed on always as the root
-        const root = {jsml: jsml, path: webdir, module: mod, express: express};
+        const root = {jsml: jsml, path: webdir, module: mod};
         
         // this context will be the top-most parent of all contexts, each jsml-file has its own context (pageContext)
         const context = {root: root};
