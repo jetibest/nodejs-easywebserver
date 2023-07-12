@@ -210,7 +210,8 @@ const self = module.exports = {
 				if(req.reroute === path && req.rerouteCount >= REROUTE_RECURSION_LIMIT)
 				{
 					console.error('easywebserver.reroute: Reroute recursion detected for path: ' + path + ' (' + (req.rerouteCount || 1) + 'x)');
-					return res.status(500).end();
+					res.statusCode = 500;
+					return res.end();
 				}
 				req.reroute = path;
 				req.rerouteCount = (req.rerouteCount || 1) + 1;

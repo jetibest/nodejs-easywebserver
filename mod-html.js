@@ -12,7 +12,7 @@ module.exports = function(options)
 	this.middleware = async function(req, res, next)
 	{
 		if(res.headersSent || res.statusCode !== 200) return next();
-	
+		
 		if(req.method !== 'GET' && req.method !== 'HEAD') return next();
 		
 		var url_path = req.url.replace(/[?#].*$/g, '');

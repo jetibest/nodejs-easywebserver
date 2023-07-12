@@ -134,7 +134,7 @@ async function handle_jsml_file(context, request, response, input_file, root_pat
     {
         if(!response.headersSent)
         {
-            response.status(403);
+            response.statusCode = 403;
         }
         return null;
     }
@@ -386,15 +386,15 @@ const jsml = {
         var response_lines = [];
         if('contentType' in page)
         {
-            response_lines.push('response.set("Content-Type", ' + JSON.stringify(page['contentType']) + ');');
+            response_lines.push('response.setHeader("Content-Type", ' + JSON.stringify(page['contentType']) + ');');
         }
         if('statusCode' in page)
         {
-            response_lines.push('response.status(' + page['statusCode'] + ');');
+            response_lines.push('response.statusCode = ' + page['statusCode'] + ';');
         }
         else if('status' in page) // alias of statusCode
         {
-            response_lines.push('response.status(' + page['status'] + ');');
+            response_lines.push('response.statusCode = ' + page['status'] + ';');
         }
         // parsing complete, produce actual js code output with wrapping:
 
@@ -475,7 +475,7 @@ module.exports = function(options)
             for(var i=0;i<bodyparsers.length;++i)
             {
                 var parser = bodyparsers[i];
-                var fn = typeof parser === 'function' ? parser : bodyparser[parser]();
+                var fn = typeof parser === 'function' ? parser : bodyparser[parser].apply(bodyparser[parser], parser === 'urlencoded' ? [{extended: false}] : []);
                 
                 await new Promise(resolve => fn.call(context, req, res, resolve));
             }
@@ -503,12 +503,12 @@ module.exports = function(options)
         }
         catch(err)
         {
-            console.error(err);
+            console.error('[jsml]: ', err);
             
             if(!res.headersSent && res.statusCode === 200)
             {
                 // show custom error page, maybe this err must be passed on in req.locals
-                res.status(500);
+                res.statusCode = 500;
             }
         }
         
