@@ -6,7 +6,7 @@ module.exports = function(options)
 	this.middleware = function(req, res, next)
 	{
 		console.log('[forcedir]: ' + req.url + ' ==> ' + res.statusCode);
-		if(res.headersSent || res.statusCode !== 200) return next();
+		if(!res || res.headersSent || res.statusCode !== 200) return next();
 
 		var originalPath = req.headers[header];
 		var isExternal = false;
