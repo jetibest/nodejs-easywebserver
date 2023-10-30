@@ -5,7 +5,7 @@ module.exports = function(options)
 	this.group = 'pre-route',
 	this.middleware = function(req, res, next)
 	{
-		console.log('[forcedir]: ' + req.url + ' ==> ' + res.statusCode);
+		console.log('[forcedir]: ' + req.url + ' ==> ' + (res && res.statusCode));
 		if(!res || res.headersSent || res.statusCode !== 200) return next();
 
 		var originalPath = req.headers[header];
