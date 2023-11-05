@@ -12,7 +12,7 @@ module.exports = function(options)
 	this.group = 'error';
 	this.middleware = (req, res, next) =>
 	{
-		if(res.headersSent || res.statusCode !== 200) return next();
+		if(!res || res.headersSent || res.statusCode !== 200) return next();
 		
 		if(code)
 		{

@@ -6,7 +6,7 @@ module.exports = function(options)
 	this.group = 'post-process';
 	this.middleware = (req, res, next) =>
 	{
-		if(res.headersSent)
+		if(res && res.headersSent)
 		{
 			var statusGroup = Math.floor(res.statusCode / 100);
 			

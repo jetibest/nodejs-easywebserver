@@ -27,7 +27,7 @@ module.exports = function(options)
 	this.group = 'pre-route';
 	this.middleware = (req, res, next) =>
 	{
-		if(res.headersSent || res.statusCode !== 200) return next();
+		if(!res || res.headersSent || res.statusCode !== 200) return next();
 		
 		for(var match of matches)
 		{

@@ -458,6 +458,8 @@ const phpFpm = function(userOptions = {}, customParams = {})
 	
 	return function(req, res, next)
 	{
+		if(!res || res.headersSent || res.statusCode !== 200) return next();
+		
 		let params = Object.assign({}, customParams, {
 			reqUri: req.headers['x-forwarded-original-path'] || req.headers['x-forwarded-path'] || req.url,
 			uri: req.url,

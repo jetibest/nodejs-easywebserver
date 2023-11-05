@@ -79,7 +79,7 @@ module.exports = function(options)
 	this.group = 'catch-all';
 	this.middleware = async function(req, res, next)
 	{
-		if(res.headersSent || res.statusCode !== 200) return next();
+		if(!res || res.headersSent || res.statusCode !== 200) return next();
 
 		if(req.method !== 'GET' && req.method !== 'HEAD') return next();
 		

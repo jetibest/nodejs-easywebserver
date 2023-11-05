@@ -461,7 +461,7 @@ module.exports = function(options)
     this._path = options.path || '/';
     this.middleware = async function(req, res, next)
     {
-        if(res.headersSent || res.statusCode !== 200) return next();
+        if(!res || res.headersSent || res.statusCode !== 200) return next();
         
         // this root is passed on always as the root
         const root = {jsml: jsml, path: webdir, module: mod};

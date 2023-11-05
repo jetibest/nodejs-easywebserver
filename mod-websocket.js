@@ -17,7 +17,7 @@ module.exports = function(options)
     this._wss = new ws.Server({noServer: true});
     this.middleware = async function(req, res, next)
     {
-        if(res &&(res.headersSent || res.statusCode !== 200)) return next();
+        if(res && (res.headersSent || res.statusCode !== 200)) return next();
         
         var req_path = req.url.replace(/[?#].*$/g, '').replace(/^\//g, '');
         var absolute_file = path.resolve(webdir, req_path);
