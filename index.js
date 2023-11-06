@@ -131,7 +131,7 @@ const self = module.exports = {
 			{
 				// check with fs.access if we can read mod-name.js, otherwise throw error that module does not exist
 				var m = moduleopts;
-				if(!m.middleware)
+				if(!m.middleware && !m.onupgrade)
 				{
 					var createfn = require(moduleopts.filename || (path.resolve(moduleopts.path || __dirname, 'mod-' + moduleopts.name + '.js')));
 					if(typeof createfn !== 'function') createfn = createfn.create;
@@ -391,14 +391,18 @@ const self = module.exports = {
 			
 			s._server.on('upgrade', async function(req, socket, head)
 			{
+				req.locals = req.locals || {};
+				
 				// execute modules in order, even if modules are async and need time to complete
 				// because there is no next function
 				for(var i=0;i<upgradehandlers.length;++i)
 				{
 					var m = upgradehandlers[i];
-					var err = null;
-					var res = await m.onupgrade.call(m, req, socket, head).catch(_err => err = _err);
-					if(err !== null)
+					try
+					{
+						await m.onupgrade.call(m, req, socket, head);
+					}
+					catch(err)
 					{
 						console.log('module ' + m.name + ' threw an exception on upgrade:');
 						console.log(err);
