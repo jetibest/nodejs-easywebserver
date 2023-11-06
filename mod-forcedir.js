@@ -37,7 +37,7 @@ module.exports = function(options)
 			req.url = mod._options._easywebserver.replaceURLPath(p => p.replace(/\/$/g, '') + '/', req);
 		}
 		
-		res.statusCode = 302;
+		res.statusCode = 307;
 		res.setHeader('Location', req.url);
 		next();
 	};
