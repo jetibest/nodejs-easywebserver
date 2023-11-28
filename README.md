@@ -147,6 +147,49 @@ Usage:
  - `<%= /* ...js-code... */ %>` is is a wrapper for `out.print(out.encodeHTML( /* ...js-code... */ ));`.
  - `<%-- ...commented out... --%>` is a comment, any data inside is ignored.
 
+## [catch-extension] mod-websocket
+Enable interpretation of JavaScriptWebSocket-files (`.jsws`).
+This mod will catch the path of the respective jsws filename (without extension), and catch Upgrade requests for WebSockets.
+
+The webserver will call the exported function in the module defined in the JSWS file, for example:
+
+```js
+module.exports = function(websocket, request)
+{
+    websocket.on('message', function(data)
+    {
+        // message received
+        console.log('Received message: ' + data);
+    });
+    websocket.on('error', function(err)
+    {
+        // unexpected error?
+    });
+    websocket.on('close', function()
+    {
+        // connection closed, clean up resources?
+    });
+
+    // send initial message (websocket is already open)
+    websocket.send('Hello!');
+};
+```
+
+If `module.exports` is not a function, then the `onconnection` property is used:
+
+```js
+module.exports = {
+    onconnection: function(websocket, request) { /* ... */ }
+};
+```
+
+If `onconnection` is not a function, then it will try to fire `emit` with a `connection` event.
+
+```js
+module.exports = new events().on('connection', function(websocket, request) { /* ... */ });
+```
+
+
 ## [catch-default] -- no mods yet --
 
 ## [catch-all] mod-list
