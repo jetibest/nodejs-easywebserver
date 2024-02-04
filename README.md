@@ -104,7 +104,13 @@ Options:
  - **`secure`**: Boolean value to indicate whether or not cookie is secure. Secure cookies are only sent over HTTPS for security. Defaults to true.
  - **`httpOnly`**: Boolean value to indicate whether client-side scripts are prevented to read/write the cookie. Defaults to true, for security.
 
-## [pre-process] -- no mods yet --
+## [pre-process] mod-bodyparser
+Parse `req.body` to an object based on the request Content-Type header.
+The original body may still be accessed through `req.rawBody`.
+Be mindful of any body size limits.
+
+Options:
+ - **`parsers`**: Parsers (name of `body-parser` module functions or custom defined middleware functions). Defaults to: `json,urlencoded`.
 
 ## [catch-extension] mod-php
 Enable delivery of PHP-files (`.php`) using `php-fpm`. This mod will run its own `php-fpm` daemon, so that it can also have its own configurable files, and portable log-files in the working directory's `.php/` path.
